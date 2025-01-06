@@ -1,0 +1,11 @@
+img.news.codeyad.com
+r.news.codeyad.com
+mail.codeyad.com
+news.codeyad.com
+crypto-api.codeyad.com
+www.codeyad.com
+api.codeyad.com
+codeyad.com
+devtalk.codeyad.com
+crypto.codeyad.com
+dl.codeyad.com
