@@ -8,7 +8,8 @@ for file in "${files[@]}"; do
 
     while IFS= read -r url; do
 
-        nuclei -u "$url" -t nuclei-templates/ -o "results_$(basename "$file" .txt).txt"
+		nuclei -silent -si 30 -stats -u "$url"  -es info,low -etags network -o nuclei_output.txt -rl 100;
+        # nuclei -u "$url" -t ~/nuclei-templates -o "results_$(basename "$file" .txt).txt"
     done < "$file"
 done
 

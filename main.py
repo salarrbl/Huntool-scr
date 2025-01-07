@@ -84,15 +84,44 @@ def all_links():
         subprocess.run(['mkdir' , 'urls'])
 
     #give all link
-    url_command = 'cat ./live_subs/live_subdomains.txt | hakrawler'
-    res_urls = subprocess.run(['bash', '-c', url_command], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    output_url = res_urls.stdout
-    error_url = res_urls.stderr
-    if (output_url):
-        with open('./urls/all_urls.txt', 'a') as file:
-            file.write(output_url)
-    if (error_url):
-        print("Error:", error_url)
+    path_domains = './live_subs/live_subdomains.txt'
+    path_domains2 = './subdomains/all_Subdomains.txt'
+    if os.path.exists(path_domains) and os.path.getsize(path_domains) > 0:
+        print("{**} running hakrawler on live_subdomains")
+        url_command = 'cat ./live_subs/live_subdomains.txt | hakrawler'
+        res_urls = subprocess.run(['bash', '-c', url_command], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        output_url = res_urls.stdout
+        error_url = res_urls.stderr
+        if (output_url):
+            with open('./urls/all_urls.txt', 'a') as file:
+                file.write(output_url)
+        if (error_url):
+            print("Error:", error_url)
+    elif os.path.exists(path_domains2) and os.path.getsize(path_domains2) > 0:
+        print("{**} running hakrawler on all_Subdomains")
+        url_command2 = 'cat ./subdomains/all_Subdomains.txt | hakrawler'
+        res_urls2 = subprocess.run(['bash', '-c', url_command2], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        output_url2 = res_urls2.stdout
+        error_url2 = res_urls2.stderr
+        if (output_url2):
+            with open('./urls/all_urls.txt', 'a') as file:
+                file.write(output_url2)
+        if (error_url2):
+            print("Error:", error_url2)
+    else:
+        print("{**} running hakrawler on orginal Domain")
+        with open('target', 'w') as file:
+            file.write(target)
+        url_command3 = 'cat ./target | hakrawler'
+        res_urls3 = subprocess.run(['bash', '-c', url_command3], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        output_url3 = res_urls3.stdout
+        error_url3 = res_urls3.stderr
+        if (output_url3):
+            with open('./urls/all_urls.txt', 'a') as file:
+                file.write(output_url3)
+        if (error_url3):
+            print("Error:", error_url3)
+
 
 def Hidden_directorys_files():
 #testing b fuff
@@ -182,16 +211,17 @@ def js_files():
     if (output_js):
          with open('./js_files/all_js_file.txt', 'a') as file:
              file.write(output_js)
-
+def nuclie():
+    subprocess.run(['bash', '-c', './nuclei/script.sh'])
 def main():
     # collect_subdomains()
     # all_Subdomains()
     # live_subs()
-    # all_links()
+    all_links()
     # Hidden_directorys_files()
     # port_scan()
-    url_possible_vuln()
+    # url_possible_vuln()
     # js_files()
-
+    # nuclei()
 
 main()
