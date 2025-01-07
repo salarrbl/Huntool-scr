@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import os
+import glob
 if len(sys.argv) != 2:
     print("Usage: python script.py <target>")
     sys.exit(1)
@@ -37,8 +38,12 @@ def collect_subdomains():
             file.write(output)
     if (error2):
         print("Error:", error)
-collect_subdomains()
 # function for extract all subdomain with all file and give all_Subdomains.txt
 def all_Subdomains():
-    result_all = subprocess.run(['cat ./subdomains/*.txt | sort | uniq > all_Subdomains.txt'])
-
+    # result_all = subprocess.run(['cat ./subdomains/*.txt | sort | uniq > all_Subdomains.txt'])
+    files = glob.glob('./subdomains/*.txt')
+    #my command
+    command = 'cat ' + ' '.join(files) + ' | sort | uniq > all_Subdomains.txt'
+    result = subprocess.run(['bash', '-c', command], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+# collect_subdomains()
+all_Subdomains()
