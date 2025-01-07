@@ -91,11 +91,29 @@ def all_links():
     if (error_url):
         print("Error:", error_url)
 
-
+def Hidden_directorys_files():
+#testing b fuff
+#ffuf -u https://newamooz.com/FUZZ -w wordlist/words.txt -mc 200,403
+    dfuff = './Hidden_directorys_files'
+    if os.path.exists(dfuff):
+        print('')
+    else: 
+        subprocess.run(['mkdir', 'Hidden_directorys_files'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    command_fuff = 'ffuf -u https://' + target +'/FUZZ' + ' -w wordlist/words.txt -mc 200,403'
+    res_ffuf = subprocess.run(['bash', '-c', command_fuff], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_ffuf = res_ffuf.stdout
+    error_ffuf = res_ffuf.stderr
+    if (output_ffuf):
+        with open('./Hidden_directorys_files/ffuf_res.txt', 'a') as file:
+            file.write(output_ffuf)
+    if  (error_ffuf):
+        print("Error", error_ffuf)
 def main():
-    collect_subdomains()
-    all_Subdomains()
-    live_subs()
-    all_links()
+    # collect_subdomains()
+    # all_Subdomains()
+    # live_subs()
+    # all_links()
+    Hidden_directorys_files()
+
 
 main()
