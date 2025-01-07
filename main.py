@@ -214,14 +214,14 @@ def js_files():
 def nuclie():
     subprocess.run(['bash', '-c', './nuclei/script.sh'])
 def main():
-    # collect_subdomains()
-    # all_Subdomains()
-    # live_subs()
+    collect_subdomains()
+    all_Subdomains()
+    live_subs()
     all_links()
-    # Hidden_directorys_files()
-    # port_scan()
-    # url_possible_vuln()
-    # js_files()
-    # nuclei()
+    Hidden_directorys_files()
+    port_scan()
+    url_possible_vuln()
+    js_files()
+    nuclei()
 
 main()
