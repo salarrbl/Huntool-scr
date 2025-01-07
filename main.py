@@ -113,6 +113,71 @@ def port_scan():
     print("{*} namp running")
     subprocess.run(['bash', '-c', './port_scan/scan_domains.sh'])
 
+def url_possible_vuln():
+    print("{*} gf running")
+    dvunls = './url_possible_vulnarblities'
+    if os.path.exists(dvunls):
+        print('')
+    else: 
+        subprocess.run(['mkdir', 'url_possible_vulnarblities'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    #for xss 
+    command_gf_xss = 'cat ./urls/all_urls.txt | ~/go/bin/gf xss'
+    res_gf_xss = subprocess.run(['bash', '-c', command_gf_xss], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_xss = res_gf_xss.stdout
+    if (output_xss):
+         with open('./url_possible_vulnarblities/xss.txt', 'a') as file:
+             file.write(output_xss)
+    #for sql injections
+    command_gf_sqli = 'cat ./urls/all_urls.txt | ~/go/bin/gf sqli'
+    res_gf_sqli = subprocess.run(['bash', '-c', command_gf_sqli], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_sqli = res_gf_sqli.stdout
+    if (output_sqli):
+         with open('./url_possible_vulnarblities/sqli.txt', 'a') as file:
+             file.write(output_sqli)
+    #for Server Site Template Injection
+    command_gf_ssti = 'cat ./urls/all_urls.txt | ~/go/bin/gf ssti'
+    res_gf_ssti = subprocess.run(['bash', '-c', command_gf_ssti], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_ssti = res_gf_ssti.stdout
+    if (output_ssti):
+         with open('./url_possible_vulnarblities/SSTI.txt', 'a') as file:
+             file.write(output_ssti)
+    
+    #for Server Site Forgive Request
+    command_gf_ssrf = 'cat ./urls/all_urls.txt | ~/go/bin/gf ssrf'
+    res_gf_ssrf = subprocess.run(['bash', '-c', command_gf_ssrf], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_ssrf = res_gf_ssrf.stdout
+    if (output_ssrf):
+         with open('./url_possible_vulnarblities/SSRF.txt', 'a') as file:
+             file.write(output_ssrf)
+     #for Remote Code Injection
+    command_gf_rce = 'cat ./urls/all_urls.txt | ~/go/bin/gf rce'
+    res_gf_rce = subprocess.run(['bash', '-c', command_gf_rce], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_rce = res_gf_rce.stdout
+    if (output_rce):
+         with open('./url_possible_vulnarblities/RCE.txt', 'a') as file:
+             file.write(output_rce)
+    #for idor
+    command_gf_idor = 'cat ./urls/all_urls.txt | ~/go/bin/gf idor'
+    res_gf_idor = subprocess.run(['bash', '-c', command_gf_idor], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_idor = res_gf_idor.stdout
+    if (output_idor):
+         with open('./url_possible_vulnarblities/IDOR.txt', 'a') as file:
+             file.write(output_idor)
+
+def js_files():
+    print("{*} Extracting all js files")
+    d = './js_files'
+    if os.path.exists(d):
+        print('')
+    else: 
+        subprocess.run(['mkdir', 'js_files'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+   
+    command_js = 'cat ./urls/all_urls.txt | grep js '
+    res_js = subprocess.run(['bash', '-c', command_js], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_js = res_js.stdout
+    if (output_js):
+         with open('./js_files/all_js_file.txt', 'a') as file:
+             file.write(output_js)
 
 def main():
     collect_subdomains()
@@ -121,6 +186,8 @@ def main():
     all_links()
     Hidden_directorys_files()
     port_scan()
+    url_possible_vuln()
+    js_files()
 
 
 main()
