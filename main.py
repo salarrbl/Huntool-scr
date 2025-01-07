@@ -54,6 +54,7 @@ def collect_subdomains():
 # function for extract all subdomain with all file and give all_Subdomains.txt
 def all_Subdomains():
     # result_all = subprocess.run(['cat ./subdomains/*.txt | sort | uniq > all_Subdomains.txt'])
+    print("{*} extracting all subdomains")
     files = glob.glob('./subdomains/*.txt')
     #my command
     command = 'cat ' + ' '.join(files) + ' | sort | uniq > ./subdomains/all_Subdomains.txt'
@@ -61,6 +62,7 @@ def all_Subdomains():
 
 def live_subs():
     print("extracting Live Subdomains") 
+    print("{*} running httpx")
     direc_subs = './live_subs'
     if os.path.exists(direc_subs):
         print('')
@@ -73,7 +75,8 @@ def live_subs():
 
 
 def all_links():
-    print("extracting all Urls") 
+    print("extracting all Urls")
+    print("{*} running hakrawler")
     durl = './urls'
     if os.path.exists(durl):
         print('')
@@ -94,6 +97,7 @@ def all_links():
 def Hidden_directorys_files():
 #testing b fuff
 #ffuf -u https://newamooz.com/FUZZ -w wordlist/words.txt -mc 200,403
+    print("{*} ffuf running")
     dfuff = './Hidden_directorys_files'
     if os.path.exists(dfuff):
         print('')
@@ -102,18 +106,21 @@ def Hidden_directorys_files():
     command_fuff = 'ffuf -u https://' + target +'/FUZZ' + ' -w wordlist/words.txt -mc 200,403'
     res_ffuf = subprocess.run(['bash', '-c', command_fuff], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     output_ffuf = res_ffuf.stdout
-    error_ffuf = res_ffuf.stderr
     if (output_ffuf):
-        with open('./Hidden_directorys_files/ffuf_res.txt', 'a') as file:
-            file.write(output_ffuf)
-    if  (error_ffuf):
-        print("Error", error_ffuf)
+         with open('./Hidden_directorys_files/ffuf_res.txt', 'a') as file:
+             file.write(output_ffuf)
+def port_scan():
+    print("{*} namp running")
+    subprocess.run(['bash', '-c', './port_scan/scan_domains.sh'])
+
+
 def main():
     # collect_subdomains()
     # all_Subdomains()
     # live_subs()
     # all_links()
     Hidden_directorys_files()
+    port_scan()
 
 
 main()
