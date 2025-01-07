@@ -115,10 +115,10 @@ def port_scan():
 
 
 def main():
-    # collect_subdomains()
-    # all_Subdomains()
-    # live_subs()
-    # all_links()
+    collect_subdomains()
+    all_Subdomains()
+    live_subs()
+    all_links()
     Hidden_directorys_files()
     port_scan()
 
