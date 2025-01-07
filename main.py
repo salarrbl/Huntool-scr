@@ -59,16 +59,43 @@ def all_Subdomains():
     command = 'cat ' + ' '.join(files) + ' | sort | uniq > ./subdomains/all_Subdomains.txt'
     result = subprocess.run(['bash', '-c', command], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-
-
-
-
-
 def live_subs():
-    print("extracting Live Subdomains")
-    subprocess.run(['mkdir', 'live_subs'])
+    print("extracting Live Subdomains") 
+    direc_subs = './live_subs'
+    if os.path.exists(direc_subs):
+        print('')
+    else:
+        subprocess.run(['mkdir' , 'live_subs'])
+
     #httpx -silent -l all_Subdomains.txt -o live_subdomains.tx
     subprocess.run(['httpx', '-silent', '-l', './subdomains/all_Subdomains.txt', '-o', './live_subs/live_subdomains.txt'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-live_subs()
 
 
+
+def all_links():
+    print("extracting all Urls") 
+    durl = './urls'
+    if os.path.exists(durl):
+        print('')
+    else:
+        subprocess.run(['mkdir' , 'urls'])
+
+    #give all link
+    url_command = 'cat ./live_subs/live_subdomains.txt | hakrawler'
+    res_urls = subprocess.run(['bash', '-c', url_command], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output_url = res_urls.stdout
+    error_url = res_urls.stderr
+    if (output_url):
+        with open('./urls/all_urls.txt', 'a') as file:
+            file.write(output_url)
+    if (error_url):
+        print("Error:", error_url)
+
+
+def main():
+    collect_subdomains()
+    all_Subdomains()
+    live_subs()
+    all_links()
+
+main()
