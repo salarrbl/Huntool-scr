@@ -163,7 +163,11 @@ def url_possible_vuln():
     if (output_idor):
          with open('./url_possible_vulnarblities/IDOR.txt', 'a') as file:
              file.write(output_idor)
-
+    files1 = glob.glob('./url_possible_vulnarblities/*.txt')
+    #my command
+    command1 = 'cat ' + ' '.join(files1) + ' | sort | uniq > ./url_possible_vulnarblities/all_possible_vulns_urls.txt'
+    subprocess.run(['bash', '-c', command1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print("{**}")
 def js_files():
     print("{*} Extracting all js files")
     d = './js_files'
@@ -180,14 +184,14 @@ def js_files():
              file.write(output_js)
 
 def main():
-    collect_subdomains()
-    all_Subdomains()
-    live_subs()
-    all_links()
-    Hidden_directorys_files()
-    port_scan()
+    # collect_subdomains()
+    # all_Subdomains()
+    # live_subs()
+    # all_links()
+    # Hidden_directorys_files()
+    # port_scan()
     url_possible_vuln()
-    js_files()
+    # js_files()
 
 
 main()
