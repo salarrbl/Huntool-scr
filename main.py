@@ -51,7 +51,7 @@ def collect_subdomains():
             file.write(output)
     if (error3):
         print("Error:", error3)
-    
+
 # function for extract all subdomain with all file and give all_Subdomains.txt
 def all_Subdomains():
     # result_all = subprocess.run(['cat ./subdomains/*.txt | sort | uniq > all_Subdomains.txt'])
@@ -62,7 +62,7 @@ def all_Subdomains():
     result = subprocess.run(['bash', '-c', command], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 def live_subs():
-    print(colorama.Fore.GREEN, "extracting Live Subdomains") 
+    print(colorama.Fore.GREEN, "extracting Live Subdomains")
     print(colorama.Fore.BLUE, "{*} running httpx")
     direc_subs = './result/live_subs'
     if os.path.exists(direc_subs):
@@ -111,9 +111,9 @@ def all_links():
             print("Error:", error_url2)
     else:
         print("{**} running hakrawler on orginal Domain")
-        with open('target', 'w') as file:
+        with open('./port_scan/target', 'w') as file:
             file.write(target)
-        url_command3 = 'cat ./target | hakrawler'
+        url_command3 = 'cat ./port_scan/target | hakrawler'
         res_urls3 = subprocess.run(['bash', '-c', url_command3], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         output_url3 = res_urls3.stdout
         error_url3 = res_urls3.stderr
@@ -131,7 +131,7 @@ def Hidden_directorys_files():
     dfuff = './result/Hidden_directorys_files'
     if os.path.exists(dfuff):
         print('')
-    else: 
+    else:
         subprocess.run(['mkdir', '-p', './result/Hidden_directorys_files'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     command_fuff = 'ffuf -u https://' + target +'/FUZZ' + ' -w wordlist/words.txt -mc 200,403'
     res_ffuf = subprocess.run(['bash', '-c', command_fuff], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -148,7 +148,7 @@ def url_possible_vuln():
     dvunls = './result/url_possible_vulnarblities'
     if os.path.exists(dvunls):
         print('')
-    else: 
+    else:
         subprocess.run(['mkdir', '-p','./result/url_possible_vulnarblities'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     #for xss 
     command_gf_xss = 'cat ./result/urls/all_urls.txt | ~/go/bin/gf xss'
@@ -171,7 +171,7 @@ def url_possible_vuln():
     if (output_ssti):
          with open('./result/url_possible_vulnarblities/SSTI.txt', 'a') as file:
              file.write(output_ssti)
-    
+
     #for Server Site Forgive Request
     command_gf_ssrf = 'cat ./result/urls/all_urls.txt | ~/go/bin/gf ssrf'
     res_gf_ssrf = subprocess.run(['bash', '-c', command_gf_ssrf], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -202,9 +202,9 @@ def js_files():
     d = './result/js_files'
     if os.path.exists(d):
         print('')
-    else: 
+    else:
         subprocess.run(['mkdir', '-p', './result/js_files'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-   
+
     command_js = 'cat ./result/urls/all_urls.txt | grep js '
     res_js = subprocess.run(['bash', '-c', command_js], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     output_js = res_js.stdout
