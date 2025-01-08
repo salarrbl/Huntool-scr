@@ -1,9 +1,10 @@
 import subprocess
+import colorama
 import sys
 import os
 import glob
 if len(sys.argv) != 2:
-    print("Usage: python script.py <target>")
+    print(colorama.Fore.RED, "Usage: python script.py <target>")
     sys.exit(1)
 
 # Give Target
@@ -17,7 +18,7 @@ def collect_subdomains():
     else:
         subprocess.run(['mkdir' , 'subdomains'])
     subprocess.run(['bash', '-c', f'cd {'./subdomains'} && ls'])
-    print("subfinder running :")
+    print(colorama.Fore.BLUE, "{*}subfinder running :")
     result = subprocess.run(['subfinder', '-d', target, '-silent'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     # Storing the result
@@ -28,7 +29,7 @@ def collect_subdomains():
             file.write(output)
     if (error):
         print("Error:", error)
-    print("findomain running :")
+    print(colorama.Fore.BLUE, "{*} findomain running :")
     result2 = subprocess.run(['findomain', '-q', '-t', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     # print(result2)
     output2 = result2.stdout
@@ -39,7 +40,7 @@ def collect_subdomains():
     if (error2):
         print("Error:", error)
 
-    print("(*) assetfinder running :")
+    print(colorama.Fore.BLUE, "(*) assetfinder running :")
     result3 = subprocess.run(['assetfinder', '-subs-only', target, ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     # Storing the result
@@ -54,15 +55,15 @@ def collect_subdomains():
 # function for extract all subdomain with all file and give all_Subdomains.txt
 def all_Subdomains():
     # result_all = subprocess.run(['cat ./subdomains/*.txt | sort | uniq > all_Subdomains.txt'])
-    print("{*} extracting all subdomains")
+    print(colorama.Fore.GREEN ,"{*} extracting all subdomains")
     files = glob.glob('./subdomains/*.txt')
     #my command
     command = 'cat ' + ' '.join(files) + ' | sort | uniq > ./subdomains/all_Subdomains.txt'
     result = subprocess.run(['bash', '-c', command], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 def live_subs():
-    print("extracting Live Subdomains") 
-    print("{*} running httpx")
+    print(colorama.Fore.GREEN, "extracting Live Subdomains") 
+    print(colorama.Fore.BLUE, "{*} running httpx")
     direc_subs = './live_subs'
     if os.path.exists(direc_subs):
         print('')
@@ -75,8 +76,8 @@ def live_subs():
 
 
 def all_links():
-    print("extracting all Urls")
-    print("{*} running hakrawler")
+    print(colorama.Fore.BLUE, "{*}extracting all Urls")
+    print(colorama.Fore.BLUE, "{*} running hakrawler")
     durl = './urls'
     if os.path.exists(durl):
         print('')
@@ -126,7 +127,7 @@ def all_links():
 def Hidden_directorys_files():
 #testing b fuff
 #ffuf -u https://newamooz.com/FUZZ -w wordlist/words.txt -mc 200,403
-    print("{*} ffuf running")
+    print(colorama.Fore.BLUE, "{*} ffuf running")
     dfuff = './Hidden_directorys_files'
     if os.path.exists(dfuff):
         print('')
@@ -139,11 +140,11 @@ def Hidden_directorys_files():
          with open('./Hidden_directorys_files/ffuf_res.txt', 'a') as file:
              file.write(output_ffuf)
 def port_scan():
-    print("{*} run a script for port scan and grap baner")
+    print(colorama.Fore.MAGENTA, "{*} run a script for port scan and grap baner")
     subprocess.run(['bash', '-c', './port_scan/script.sh'])
 
 def url_possible_vuln():
-    print("{*} gf running")
+    print(colorama.Fore.BLUE, "{*} gf running")
     dvunls = './url_possible_vulnarblities'
     if os.path.exists(dvunls):
         print('')
@@ -196,9 +197,8 @@ def url_possible_vuln():
     #my command
     command1 = 'cat ' + ' '.join(files1) + ' | sort | uniq > ./url_possible_vulnarblities/all_possible_vulns_urls.txt'
     subprocess.run(['bash', '-c', command1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    print("{**}")
 def js_files():
-    print("{*} Extracting all js files")
+    print(colorama.Fore.GREEN, "{*} Extracting all js files")
     d = './js_files'
     if os.path.exists(d):
         print('')
