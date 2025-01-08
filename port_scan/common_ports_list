@@ -1,0 +1,47 @@
+1	TCP Port Service Multiplexer (tcpmux)
+20	FTP (File Transfer Protocol) - Data
+21	FTP (File Transfer Protocol) - Control
+22	SSH (Secure Shell)
+23	Telnet
+25	SMTP (Simple Mail Transfer Protocol)
+43	WHOIS
+53	DNS (Domain Name System)
+67	DHCP (Bootstrap Protocol Server)
+68	DHCP (Bootstrap Protocol Client)
+69	TFTP (Trivial File Transfer Protocol)
+80	HTTP (HyperText Transfer Protocol)
+110	POP3 (Post Office Protocol v3)
+111	RPCBind / SunRPC
+119	NNTP (Network News Transfer Protocol)
+123	NTP (Network Time Protocol)
+135	Microsoft RPC
+137	NetBIOS Name Service
+138	NetBIOS Datagram Service
+139	NetBIOS Session Service
+143	IMAP (Internet Message Access Protocol)
+161	SNMP (Simple Network Management Protocol)
+162	SNMP Trap
+179	BGP (Border Gateway Protocol)
+389	LDAP (Lightweight Directory Access Protocol)
+443	HTTPS (HTTP Secure)
+445	Microsoft-DS (Active Directory, SMB)
+465	SMTPS (SMTP over SSL)
+514	Syslog
+515	Line Printer Daemon (LPD)
+587	SMTP (Mail Submission)
+631	Internet Printing Protocol (IPP)
+993	IMAPS (IMAP over SSL)
+995	POP3S (POP3 over SSL)
+1433	Microsoft SQL Server
+1434	Microsoft SQL Server Monitor
+1521	Oracle Database
+2049	NFS (Network File System)
+2082	cPanel
+2083	cPanel (Secure)
+3306	MySQL
+3389	RDP (Remote Desktop Protocol)
+5432	PostgreSQL
+5900	VNC (Virtual Network Computing)
+6379	Redis
+8080	HTTP Proxy / Alternative HTTP
+8443	HTTPS Proxy / Alternative HTTPS
