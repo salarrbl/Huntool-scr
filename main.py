@@ -1,5 +1,6 @@
 import subprocess
 import colorama
+import threading
 import sys
 import os
 import glob
@@ -224,4 +225,8 @@ def main():
     js_files()
     nuclie()
 
-main()
+
+threading.Thread(target=main).start()
+
+
+subprocess.run(['rm', '-rf', './port_scan/target'])
