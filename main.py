@@ -132,7 +132,7 @@ def Hidden_directorys_files():
     if os.path.exists(dfuff):
         print('')
     else: 
-        subprocess.run(['mkdir', '-p', 'Hidden_directorys_files'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        subprocess.run(['mkdir', '-p', './result/Hidden_directorys_files'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     command_fuff = 'ffuf -u https://' + target +'/FUZZ' + ' -w wordlist/words.txt -mc 200,403'
     res_ffuf = subprocess.run(['bash', '-c', command_fuff], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     output_ffuf = res_ffuf.stdout
