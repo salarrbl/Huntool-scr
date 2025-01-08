@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the files containing the URLs
-files=("../subdomains/all_Subdomains.txt")
+files=("../result/subdomains/all_Subdomains.txt")
 
 # Loop through each file
 for file in "${files[@]}"; do
