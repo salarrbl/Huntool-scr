@@ -139,8 +139,8 @@ def Hidden_directorys_files():
          with open('./Hidden_directorys_files/ffuf_res.txt', 'a') as file:
              file.write(output_ffuf)
 def port_scan():
-    print("{*} namp running")
-    subprocess.run(['bash', '-c', './port_scan/scan_domains.sh'])
+    print("{*} run a script for port scan and grap baner")
+    subprocess.run(['bash', '-c', './port_scan/script.sh'])
 
 def url_possible_vuln():
     print("{*} gf running")
@@ -222,6 +222,6 @@ def main():
     port_scan()
     url_possible_vuln()
     js_files()
-    nuclei()
+    nuclie()
 
 main()
