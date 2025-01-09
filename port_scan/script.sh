@@ -1,10 +1,7 @@
 #!/bin/bash
 
-# if [ $# -eq 0 ]; then
-#     echo "Usage: $0 <target>"
-#     exit 1
-# fi
 target=`cat ./target`
+# target=$1
 echo $target
 port_baner() {
 		
