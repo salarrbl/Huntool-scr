@@ -214,13 +214,19 @@ def js_files():
              file.write(output_js)
 def nuclie():
     subprocess.run(['bash', '-c', './nuclei/script.sh'])
+
+
+
+def sql_map():
+    subprocess.run(['bash', '-c', './sqlmap/script.sh'])
+
 def main():
     # collect_subdomains()
     # all_Subdomains()
     # live_subs()
     # all_links()
     # Hidden_directorys_files()
-    # port_scan()
+    port_scan()
     url_possible_vuln()
     js_files()
     nuclie()
