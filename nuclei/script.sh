@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Define the files containing the URLs
-files=("../result/subdomains/all_Subdomains.txt")
+files="./../result/subdomains/all_Subdomains.txt"
 
 # Loop through each file
-for file in "${files[@]}"; do
+for file in "${files}"; do
 
     while IFS= read -r url; do
 
