@@ -219,17 +219,20 @@ def nuclie():
 
 def sql_map():
     subprocess.run(['bash', '-c', './sqlmap/script.sh'])
-
+def commix():
+    subprocess.run(['bash', '-c', './commix/script.sh'])
 def main():
     # collect_subdomains()
     # all_Subdomains()
     # live_subs()
     # all_links()
     # Hidden_directorys_files()
-    port_scan()
-    url_possible_vuln()
-    js_files()
-    nuclie()
+    # port_scan()
+    # url_possible_vuln()
+    # js_files()
+    # nuclie()
+    sql_map()
+    commix()
 
 
 threading.Thread(target=main).start()
