@@ -190,13 +190,3 @@ case "$1" in
 		"
 		;;
 esac
-# collect_subdomains
-# live_subs
-# all_links
-# hidden_directories_files
-# port_scan
-# url_possible_vuln
-# js_files
-# nuclie
-# commix
-# sqlmap
