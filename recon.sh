@@ -3,12 +3,15 @@
 # 
 if [ -z $1  ]; then
     echo -e "\e[31mUsage: $0 <target>\e[0m"
+    echo -e "\e[31m./recon.sh --help or -h\e[0m"
     exit 1
 fi
 
 # target 
 TARGET=$1
-figlet $TARGET
+if [ -z $TARGET ]; then
+	figlet $TARGET
+fi
 # Function to collect subdomains
 collect_subdomains() {
     echo -e "\e[34m[*] Running subfinder...\e[0m"
@@ -50,10 +53,15 @@ all_links() {
     fi
 }
 
+parametrs() {
+	cat ./result/urls/all_urls.txt | while ifs= read -r parametrs; do
+		x8 -u "$parametrs" -w ./wordlist/parms.txt > ./result/parametrs/p.txt
+	done
+}
 # find hidden directories/files
 hidden_directories_files() {
     echo -e "\e[34m[*] Running ffuf...\e[0m"
-    ffuf -u "https://$TARGET/FUZZ" -w wordlist/words.txt -mc 200,403 -o ./result/hidden_directorys_files/ffuf_res.txt
+    ffuf -u "https://$TARGET/FUZZ" -w wordlist/words.txt  -o ./result/hidden_directorys_files/ffuf_res.txt
 }
 
 # port scanning with nmap 
@@ -65,33 +73,35 @@ port_scan() {
 
 all_subs_port_scan() {
 	echo -e "\e[34m[*] Running Nuclei...\e[0m"
-	cat ./result/subdomains/all_subdomains.txt | while ifs= read -r purl; do
+	cat ./result/live_subs/live_subdomains.txt | while ifs= read -r purl; do
 		echo "runing nmap  on the $purl"
 		nmap -sC -sV -p- "$purl" -oN ./result/nmap-subs-result.txt
 	done 
 }
-# Function to find possible vulnerabilities in URLs
+# find possible vulnerabilities in URLs with gf
 url_possible_vuln() {
     echo -e "\e[34m[*] Running gf...\e[0m"
-
     # XSS
     cat ./result/urls/all_urls.txt | ~/go/bin/gf xss > ./result/url_possible_vulnarblities/xss.txt
-
+    cat ./result/parametrs/p.txt | ~/go/bin/gf xss >> ./result/url_possible_vulnarblities/xss.txt
     # SQL Injection
     cat ./result/urls/all_urls.txt | ~/go/bin/gf sqli > ./result/url_possible_vulnarblities/sqli.txt
-
+    cat ./result/parametrs/p.txt | ~/go/bin/gf sqli >> ./result/url_possible_vulnarblities/sqli.txt
     # SSTI
     cat ./result/urls/all_urls.txt | ~/go/bin/gf ssti > ./result/url_possible_vulnarblities/ssti.txt
-
+    cat ./result/parametrs/p.txt | ~/go/bin/gf ssti >> ./result/url_possible_vulnarblities/ssti.txt
     # SSRF
     cat ./result/urls/all_urls.txt | ~/go/bin/gf ssrf > ./result/url_possible_vulnarblities/ssrf.txt
-
+    cat ./result/parametrs/p.txt | ~/go/bin/gf ssrf >> ./result/url_possible_vulnarblities/ssrf.txt
     # RCE
     cat ./result/urls/all_urls.txt | ~/go/bin/gf rce > ./result/url_possible_vulnarblities/rce.txt
-
+    cat ./result/parametrs/p.txt | ~/go/bin/gf rce >> ./result/url_possible_vulnarblities/rce.txt
     # IDOR
     cat ./result/urls/all_urls.txt | ~/go/bin/gf idor > ./result/url_possible_vulnarblities/idor.txt
-
+    cat ./result/parametrs/p.txt | ~/go/bin/gf idor >> ./result/url_possible_vulnarblities/idor.txt
+	# redirect 
+    cat ./result/urls/all_urls.txt | ~/go/bin/gf redirect > ./result/url_possible_vulnarblities/redirect.txt
+    cat ./result/parametrs/p.txt | ~/go/bin/gf redirect >> ./result/url_possible_vulnarblities/redirect.txt
     # Combine all results
     cat ./result/url_possible_vulnarblities/*.txt | sort | uniq > ./result/url_possible_vulnarblities/all_possible_vulns_urls.txt
 }
@@ -105,22 +115,88 @@ js_files() {
 # Nuclei
 nuclie() {
     echo -e "\e[34m[*] Running Nuclei...\e[0m"
-	cat ./result/subdomains/all_subdomains.txt | while ifs= read -r url; do
+	cat ./result/live_subs/live_subdomains.txt | while ifs= read -r url; do
 		echo "runing nuclie on the $url"
 		nuclei -silent -si 30 -stats -u "$url"  -es info,low -etags network -o ./result/nuclie_res/nuclei_output.txt -rl 100;
 	done 
 }
 
-# Main function
-main() {
-    collect_subdomains
-    live_subs
-    all_links
-    hidden_directories_files
-    port_scan
-    url_possible_vuln
-    js_files
-    nuclie
+
+
+commix() {
+	while read -r target_commix; do
+		commix --url "$target_commix" --batch
+	done < ./result/url_possible_vulnarblities/rce.txt
+
 }
 
-main
+sqlmap() {
+	while read -r target_sqli; do
+    	sqlmap --url "$target_sqli" --batch --dbs
+	done < ./result/url_possible_vulnarblities/sqli.txt
+
+}
+
+
+
+mkdir -p ./result/{subdomains,live_subs,urls,hidden_directorys_files,url_possible_vulnarblities,js_files}
+case "$2" in
+	-subs)
+		collect_subdomains
+		;;
+	-live-subs)
+		live_subs
+		;;
+	-links)
+		all_links
+		;;
+	-hiddens)
+		hidden_directories_files
+		;;
+	-ports)
+		port_scan
+		;;
+	-vuln-url)
+		url_possible_vuln
+		;;
+	-js)
+		js_files
+		;;
+	-nuclei)
+		nuclie
+		;;
+
+	-commix)
+		commix
+		;;
+	-sqlmap)
+		sqlmap
+		;;
+
+esac
+case "$1" in
+	--help | -h)
+		echo "
+		-subs          find subdomains
+		-live_subs     extract only live subdomains
+		-links         Extract all link(live subdomains or just target)
+		-hiddens       find hidden file or directory by ffuf 
+		-ports         port scan with nmap 
+		-vuln-url      extract urls possible be vulnerabilities by gf 
+		-js            extract all js file 
+		-nuclie        Vulnerability Scanners with nuclie
+		-commix        run commix to the ./result/url_possible_vulnarblities/rce.txt
+		-sqlmap        run sqlmap  to the ./result/url_possible_vulnarblities/sqli.txt
+		"
+		;;
+esac
+# collect_subdomains
+# live_subs
+# all_links
+# hidden_directories_files
+# port_scan
+# url_possible_vuln
+# js_files
+# nuclie
+# commix
+# sqlmap
