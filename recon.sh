@@ -3,15 +3,15 @@
 # 
 if [ -z $1  ]; then
     echo -e "\e[31mUsage: $0 <target>\e[0m"
-    echo -e "\e[31m./recon.sh --help or -h\e[0m"
+    echo -e "\e[31m./recon.sh --help \e[0m"
     exit 1
 fi
 
 # target 
-TARGET=$1
-if [ -z $TARGET ]; then
-	figlet $TARGET
-fi
+TARGET=$2
+# if [ -z $TARGET ]; then
+# 	figlet $TARGET
+# fi
 # Function to collect subdomains
 collect_subdomains() {
     echo -e "\e[34m[*] Running subfinder...\e[0m"
@@ -61,7 +61,7 @@ parametrs() {
 # find hidden directories/files
 hidden_directories_files() {
     echo -e "\e[34m[*] Running ffuf...\e[0m"
-    ffuf -u "https://$TARGET/FUZZ" -w wordlist/words.txt  -o ./result/hidden_directorys_files/ffuf_res.txt
+    ffuf -u "https://$TARGET/FUZZ" -w wordlist/words.txt  -o -ms 200,403 ./result/hidden_directorys_files/ffuf_res.txt
 }
 
 # port scanning with nmap 
@@ -136,11 +136,24 @@ sqlmap() {
 	done < ./result/url_possible_vulnarblities/sqli.txt
 
 }
-
+all() {
+	collect_subdomains
+	live_subs
+	all_links
+	parametrs
+	hidden_directories_files
+	port_scan
+	all_subs_port_scan
+	url_possible_vuln
+	js_files
+	nuclie
+	commix
+	sqlmap
+}
 
 
 mkdir -p ./result/{subdomains,live_subs,urls,hidden_directorys_files,url_possible_vulnarblities,js_files}
-case "$2" in
+case "$1" in
 	-subs)
 		collect_subdomains
 		;;
@@ -172,21 +185,25 @@ case "$2" in
 	-sqlmap)
 		sqlmap
 		;;
+	-all)
+		all
+		;;
 
 esac
 case "$1" in
 	--help | -h)
 		echo "
-		-subs          find subdomains
-		-live_subs     extract only live subdomains
-		-links         Extract all link(live subdomains or just target)
-		-hiddens       find hidden file or directory by ffuf 
-		-ports         port scan with nmap 
-		-vuln-url      extract urls possible be vulnerabilities by gf 
-		-js            extract all js file 
-		-nuclie        Vulnerability Scanners with nuclie
-		-commix        run commix to the ./result/url_possible_vulnarblities/rce.txt
-		-sqlmap        run sqlmap  to the ./result/url_possible_vulnarblities/sqli.txt
+		-subs      <target>     find subdomains
+		-live_subs              extract only live subdomains  ./result/subdomains/all_subdomains.txt
+		-links                  Extract all link(live subdomains or just target)  
+		-hiddens                find hidden file or directory by ffuf  <target> 
+		-ports                  port scan with nmap 
+		-vuln-url               extract urls possible be vulnerabilities by gf 
+		-js        <target>     extract all js file 
+		-nuclie    <target>     Vulnerability Scanners with nuclie
+		-commix    <target>     run commix to the ./result/url_possible_vulnarblities/rce.txt
+		-sqlmap    <target>     run sqlmap  to the ./result/url_possible_vulnarblities/sqli.txt
+		-all       <target>     run all  Functions 
 		"
 		;;
 esac
