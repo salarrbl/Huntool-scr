@@ -70,7 +70,7 @@ parametrs() {
 # find hidden directories/files
 hidden_directories_files() {
     echo -e "\e[34m[*] Running ffuf...\e[0m"
-    ffuf -u "https://$TARGET/FUZZ" -w wordlist/words.txt  -o -ms 200,403 ./result/hidden_directorys_files/ffuf_res.txt
+    ffuf -u "https://$TARGET/FUZZ" -w wordlist/raft-small.txt  -o ./result/hidden_directorys_files/ffuf_res.txt -mc all -fs 3748 
 }
 
 # port scanning with nmap 
