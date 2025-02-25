@@ -27,7 +27,16 @@ collect_subdomains() {
     cat ./result/subdomains/*.txt | sort | uniq > ./result/subdomains/all_subdomains.txt
 
 }
+collect_subdomains_subs() {
+    echo -e "\e[34m[*] Find subdomains  subdomains \e[0m"
+	cat ./result/subdomains/all_subdomains.txt | while ifs= read -r sub  ; do
+		echo $sub
+		subfinder -d "$sub" -silent >> ./result/subdomains/subs_subs_s.txt 
+		assetfinder -subs-only "$sub" -silent >> ./result/subdomains/subs_subs_a.txt
+		cat ./result/subdomains/subs_subs_*  | sort | uniq >> ./result/subdomains/all_subdomains.txt
 
+	done
+}
     
 # extract live subdomains
 live_subs() {
@@ -83,25 +92,25 @@ url_possible_vuln() {
     echo -e "\e[34m[*] Running gf...\e[0m"
     # XSS
     cat ./result/urls/all_urls.txt | ~/go/bin/gf xss > ./result/url_possible_vulnarblities/xss.txt
-    cat ./result/parametrs/p.txt | ~/go/bin/gf xss >> ./result/url_possible_vulnarblities/xss.txt
+    # cat ./result/parametrs/p.txt | ~/go/bin/gf xss >> ./result/url_possible_vulnarblities/xss.txt
     # SQL Injection
     cat ./result/urls/all_urls.txt | ~/go/bin/gf sqli > ./result/url_possible_vulnarblities/sqli.txt
-    cat ./result/parametrs/p.txt | ~/go/bin/gf sqli >> ./result/url_possible_vulnarblities/sqli.txt
+    # cat ./result/parametrs/p.txt | ~/go/bin/gf sqli >> ./result/url_possible_vulnarblities/sqli.txt
     # SSTI
     cat ./result/urls/all_urls.txt | ~/go/bin/gf ssti > ./result/url_possible_vulnarblities/ssti.txt
-    cat ./result/parametrs/p.txt | ~/go/bin/gf ssti >> ./result/url_possible_vulnarblities/ssti.txt
+    # cat ./result/parametrs/p.txt | ~/go/bin/gf ssti >> ./result/url_possible_vulnarblities/ssti.txt
     # SSRF
     cat ./result/urls/all_urls.txt | ~/go/bin/gf ssrf > ./result/url_possible_vulnarblities/ssrf.txt
-    cat ./result/parametrs/p.txt | ~/go/bin/gf ssrf >> ./result/url_possible_vulnarblities/ssrf.txt
+    # cat ./result/parametrs/p.txt | ~/go/bin/gf ssrf >> ./result/url_possible_vulnarblities/ssrf.txt
     # RCE
     cat ./result/urls/all_urls.txt | ~/go/bin/gf rce > ./result/url_possible_vulnarblities/rce.txt
-    cat ./result/parametrs/p.txt | ~/go/bin/gf rce >> ./result/url_possible_vulnarblities/rce.txt
+    # cat ./result/parametrs/p.txt | ~/go/bin/gf rce >> ./result/url_possible_vulnarblities/rce.txt
     # IDOR
     cat ./result/urls/all_urls.txt | ~/go/bin/gf idor > ./result/url_possible_vulnarblities/idor.txt
-    cat ./result/parametrs/p.txt | ~/go/bin/gf idor >> ./result/url_possible_vulnarblities/idor.txt
+    # cat ./result/parametrs/p.txt | ~/go/bin/gf idor >> ./result/url_possible_vulnarblities/idor.txt
 	# redirect 
     cat ./result/urls/all_urls.txt | ~/go/bin/gf redirect > ./result/url_possible_vulnarblities/redirect.txt
-    cat ./result/parametrs/p.txt | ~/go/bin/gf redirect >> ./result/url_possible_vulnarblities/redirect.txt
+    # cat ./result/parametrs/p.txt | ~/go/bin/gf redirect >> ./result/url_possible_vulnarblities/redirect.txt
     # Combine all results
     cat ./result/url_possible_vulnarblities/*.txt | sort | uniq > ./result/url_possible_vulnarblities/all_possible_vulns_urls.txt
 }
@@ -157,6 +166,9 @@ case "$1" in
 	-subs)
 		collect_subdomains
 		;;
+	-subs-subs)
+		collect_subdomains_subs
+		;;
 	-live-subs)
 		live_subs
 		;;
@@ -193,17 +205,18 @@ esac
 case "$1" in
 	--help | -h)
 		echo "
-		-subs      <target>     find subdomains
-		-live_subs              extract only live subdomains  ./result/subdomains/all_subdomains.txt
-		-links                  Extract all link(live subdomains or just target)  
-		-hiddens                find hidden file or directory by ffuf  <target> 
-		-ports                  port scan with nmap 
-		-vuln-url               extract urls possible be vulnerabilities by gf 
-		-js        <target>     extract all js file 
-		-nuclie    <target>     Vulnerability Scanners with nuclie
-		-commix    <target>     run commix to the ./result/url_possible_vulnarblities/rce.txt
-		-sqlmap    <target>     run sqlmap  to the ./result/url_possible_vulnarblities/sqli.txt
-		-all       <target>     run all  Functions 
+		-subs       <target>     find subdomains
+		-subs-subs               fnd subdomains, for before domain subdomains
+		-live_subs               extract only live subdomains  ./result/subdomains/all_subdomains.txt
+		-links                   Extract all link(live subdomains or just target)  
+		-hiddens                 find hidden file or directory by ffuf  <target> 
+		-ports                   port scan with nmap 
+		-vuln-url                extract urls possible be vulnerabilities by gf 
+		-js        <target>      extract all js file 
+		-nuclie    <target>      Vulnerability Scanners with nuclie
+		-commix    <target>      run commix to the ./result/url_possible_vulnarblities/rce.txt
+		-sqlmap    <target>      run sqlmap  to the ./result/url_possible_vulnarblities/sqli.txt
+		-all       <target>      run all  Functions 
 		"
 		;;
 esac
