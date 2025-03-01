@@ -8,10 +8,10 @@ if [ -z $1  ]; then
 fi
 
 # target 
-TARGET=$2
-# if [ -z $TARGET ]; then
-# 	figlet $TARGET
-# fi
+TARGET=$1
+if [ -z $TARGET ]; then
+	figlet $TARGET
+fi
 # Function to collect subdomains
 collect_subdomains() {
     echo -e "\e[34m[*] Running subfinder...\e[0m"
@@ -27,16 +27,16 @@ collect_subdomains() {
     cat ./result/subdomains/*.txt | sort | uniq > ./result/subdomains/all_subdomains.txt
 
 }
-collect_subdomains_subs() {
-    echo -e "\e[34m[*] Find subdomains  subdomains \e[0m"
-	cat ./result/subdomains/all_subdomains.txt | while ifs= read -r sub  ; do
-		echo $sub
-		subfinder -d "$sub" -silent >> ./result/subdomains/subs_subs_s.txt 
-		assetfinder -subs-only "$sub" -silent >> ./result/subdomains/subs_subs_a.txt
-		cat ./result/subdomains/subs_subs_*  | sort | uniq >> ./result/subdomains/all_subdomains.txt
+# collect_subdomains_subs() {
+#     echo -e "\e[34m[*] Find subdomains  subdomains \e[0m"
+# 	cat ./result/subdomains/all_subdomains.txt | while ifs= read -r sub  ; do
+# 		echo $sub
+# 		subfinder -d "$sub" -silent >> ./result/subdomains/subs_subs_s.txt 
+# 		assetfinder -subs-only "$sub" -silent >> ./result/subdomains/subs_subs_a.txt
+# 		cat ./result/subdomains/subs_subs_*  | sort | uniq >> ./result/subdomains/all_subdomains.txt
 
-	done
-}
+# 	done
+# }
     
 # extract live subdomains
 live_subs() {
@@ -147,6 +147,7 @@ sqlmap() {
 }
 all() {
 	collect_subdomains
+	collect_subdomains_subs
 	live_subs
 	all_links
 	parametrs
@@ -162,61 +163,62 @@ all() {
 
 
 mkdir -p ./result/{subdomains,live_subs,urls,hidden_directorys_files,url_possible_vulnarblities,js_files}
-case "$1" in
-	-subs)
-		collect_subdomains
-		;;
-	-subs-subs)
-		collect_subdomains_subs
-		;;
-	-live-subs)
-		live_subs
-		;;
-	-links)
-		all_links
-		;;
-	-hiddens)
-		hidden_directories_files
-		;;
-	-ports)
-		port_scan
-		;;
-	-vuln-url)
-		url_possible_vuln
-		;;
-	-js)
-		js_files
-		;;
-	-nuclei)
-		nuclie
-		;;
+all
+# case "$1" in
+# 	-subs)
+# 		collect_subdomains
+# 		;;
+# 	-subs-subs)
+# 		collect_subdomains_subs
+# 		;;
+# 	-live-subs)
+# 		live_subs
+# 		;;
+# 	-links)
+# 		all_links
+# 		;;
+# 	-hiddens)
+# 		hidden_directories_files
+# 		;;
+# 	-ports)
+# 		port_scan
+# 		;;
+# 	-vuln-url)
+# 		url_possible_vuln
+# 		;;
+# 	-js)
+# 		js_files
+# 		;;
+# 	-nuclei)
+# 		nuclie
+# 		;;
 
-	-commix)
-		commix
-		;;
-	-sqlmap)
-		sqlmap
-		;;
-	-all)
-		all
-		;;
+# 	-commix)
+# 		commix
+# 		;;
+# 	-sqlmap)
+# 		sqlmap
+# 		;;
+# 	-all)
+# 		all
+# 		;;
 
-esac
-case "$1" in
-	--help | -h)
-		echo "
-		-subs       <target>     find subdomains
-		-subs-subs               fnd subdomains, for before domain subdomains
-		-live_subs               extract only live subdomains  ./result/subdomains/all_subdomains.txt
-		-links                   Extract all link(live subdomains or just target)  
-		-hiddens                 find hidden file or directory by ffuf  <target> 
-		-ports                   port scan with nmap 
-		-vuln-url                extract urls possible be vulnerabilities by gf 
-		-js        <target>      extract all js file 
-		-nuclie    <target>      Vulnerability Scanners with nuclie
-		-commix    <target>      run commix to the ./result/url_possible_vulnarblities/rce.txt
-		-sqlmap    <target>      run sqlmap  to the ./result/url_possible_vulnarblities/sqli.txt
-		-all       <target>      run all  Functions 
-		"
-		;;
-esac
+# esac
+# case "$1" in
+# 	--help | -h)
+# 		echo "
+# 		-subs       <target>     find subdomains
+# 		-subs-subs               fnd subdomains, for before domain subdomains
+# 		-live_subs               extract only live subdomains  ./result/subdomains/all_subdomains.txt
+# 		-links                   Extract all link(live subdomains or just target)  
+# 		-hiddens                 find hidden file or directory by ffuf  <target> 
+# 		-ports                   port scan with nmap 
+# 		-vuln-url                extract urls possible be vulnerabilities by gf 
+# 		-js        <target>      extract all js file 
+# 		-nuclie    <target>      Vulnerability Scanners with nuclie
+# 		-commix    <target>      run commix to the ./result/url_possible_vulnarblities/rce.txt
+# 		-sqlmap    <target>      run sqlmap  to the ./result/url_possible_vulnarblities/sqli.txt
+# 		-all       <target>      run all  Functions 
+# 		"
+# 		;;
+# esac
