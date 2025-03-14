@@ -27,16 +27,16 @@ collect_subdomains() {
     cat ./result/subdomains/*.txt | sort | uniq > ./result/subdomains/all_subdomains.txt
 
 }
-# collect_subdomains_subs() {
-#     echo -e "\e[34m[*] Find subdomains  subdomains \e[0m"
-# 	cat ./result/subdomains/all_subdomains.txt | while ifs= read -r sub  ; do
-# 		echo $sub
-# 		subfinder -d "$sub" -silent >> ./result/subdomains/subs_subs_s.txt 
-# 		assetfinder -subs-only "$sub" -silent >> ./result/subdomains/subs_subs_a.txt
-# 		cat ./result/subdomains/subs_subs_*  | sort | uniq >> ./result/subdomains/all_subdomains.txt
+collect_subdomains_subs() {
+    echo -e "\e[34m[*] Find subdomains  subdomains \e[0m"
+	cat ./result/subdomains/all_subdomains.txt | while ifs= read -r sub  ; do
+		echo $sub
+		subfinder -d "$sub" -silent >> ./result/subdomains/subs_subs_s.txt 
+		assetfinder -subs-only "$sub" -silent >> ./result/subdomains/subs_subs_a.txt
+		cat ./result/subdomains/*  | sort | uniq > ./result/subdomains/all_subdomains.txt
 
-# 	done
-# }
+	done
+}
     
 # extract live subdomains
 live_subs() {
