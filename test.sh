@@ -67,37 +67,37 @@ all_links() {
         cat ./$TARGET/subdomains/all_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
     else
         echo -e "\e[32m[*] Running hakrawler on original domain...\e[0m"
-        echo "https://$TARGET" | hakrawler > ./$TARGET/urls/all_urls.txt
+		target=$TARGET
+		echo $target
+        echo "https://$target" | hakrawler >> ./$TARGET/urls/all_urls.txt
     fi
 }
 hidden_directories_files_main() {
     echo -e "\e[34m[*] Running ffuf on original input \e[0m"
 	mkdir -p ./$TARGET/FUZZ
-    ffuf -u "https://$TARGET/FUZZ" -w wordlist/raft-small.txt -c  -mc 200,204,301,302,307,403,405,500 -fs 3748  | awk -v tgt="https://$TARGET/" '{print tgt $1}' | tee ./$TARGET/FUZZ/ffuf_res.txt
+    ffuf -u "https://$TARGET/FUZZ" -w wordlist/raft-small.txt -c  -mc 200,204,301,302,307,403,405,500  | awk -v tgt="https://$TARGET/" '{print tgt $1}' | tee ./$TARGET/FUZZ/ffuf_res.txt
 }
 hidden_directories_files_live_subs() {
     echo -e "\e[34m[*] Running ffuf on live_subdomains\e[0m"
 	mkdir -p ./$TARGET/FUZZ
 	cat ./codeyad.com/live_subs/live_subdomains.txt | while ifs= read -r subs; do 
-		ffuf -u  "https://$TARGET/FUZZ" -w wordlist/raft-small.txt -c   -mc 200,204,301,302,307,403,405,500 -fs 3748  | awk -v tgpt="https://$TARGET/" '{print tgt $1}' | tee ./$TARGET/FUZZ/ffuf_res_subs.txt
+		ffuf -u  "https://$TARGET/FUZZ" -w wordlist/raft-small.txt -c   -mc 200,204,301,302,307,403,405,500  | awk -v tgpt="https://$TARGET/" '{print tgt $1}' | tee ./$TARGET/FUZZ/ffuf_res_subs.txt
 	done
 }
 
 
 parametrs() {
 	mkdir  -p ./$TARGET/parametrs
-	if [ -s ./$TARGET/urls/all_urls ]; then
-		echo -e "\e[32m[*] Running x8 on all urls \e[0m"
-		cat ./$TARGET/urls/all_urls.txt | while ifs= read -r parametrs; do
-			x8 -u "$parametrs" -w ./wordlist/parms.txt > ./$TARGET/parametrs/parametrs.txt
-		done
-	else
-		echo -e "\e[32m[*] Running x8 on original urls \e[0m"
-		x8 -u "https://$TARGET/?" -w ./wordlist/parms.txt > ./$TARGET/parametrs/parametrs.txt
-
+	echo -e "\e[32m[*] Running x8 on original urls \e[0m"
+	ffuf -u "https://$TARGET/?FUZZ=test" -w ./wordlist/parms.txt -o ./$TARGET/parametrs/parametrs.txt -mc 301,302,307,403,500,200
 
 }
 
+all_link_parametr() {
+		cat ./$TARGET/urls/all_urls.txt | while ifs= read -r parametrs; do
+			x8 -u "$parametrs" -w ./wordlist/parms.txt >> ./$TARGET/parametrs/parametrs.txt
+		done
+}
 main () {
 	# collect_subdomains
 	# live_subs
@@ -105,5 +105,6 @@ main () {
 	parametrs
 	# hidden_directories_files_main
 	# hidden_directories_files_live_subs
+	# all_link_parametr
 }
 main
