@@ -1,12 +1,12 @@
 # Recon-scr
 ## Contemplating 
 ### Install 
-httpx
-subfinder 
-findomain
-hakwalre
-nmap
-commix
-sqlmap 
-gf
-nuclei
+- httpx
+- subfinder 
+- findomain
+- hakwalre
+- nmap
+- commix
+- sqlmap 
+- gf
+- nuclei

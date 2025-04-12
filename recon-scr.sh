@@ -205,13 +205,13 @@ xss () {
 main () {
 	# collect_subdomains
 	# live_subs
-    # all_links
+    all_links
 	# all_link_parametr
-	sqli
-	rce
-	ssti
-	ssrf
-	xss
+	# sqli
+	# rce
+	# ssti
+	# ssrf
+	# xss
 }
 main
 
