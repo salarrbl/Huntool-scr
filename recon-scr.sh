@@ -54,27 +54,28 @@ live_subs() {
 }
 
 # extract all URLs
-all_links() {
-	mkdir -p ./$TARGET/urls
-    echo -e "\e[34m[*] Extracting all URLs...\e[0m"
-    echo -e "\e[34m[*] Running hakrawler...\e[0m"
+# all_links_domain() {
+# 	mkdir -p ./$TARGET/urls
+#     echo -e "\e[34m[*] Extracting all URLs...\e[0m"
+#     echo -e "\e[34m[*] Running hakrawler...\e[0m"
+# 	tar="https://$TARGET" 
+# 	echo $tar | hakrawler
+#     # if [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
+#     #     echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
+#     #     cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
+#     # elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
+# 		# live_subs
+#     #     echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
+#     #     cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
+#     # else
+#     #     echo -e "\e[32m[*] Running other function for run hakrawler on the live subdomains...\e[0m"
+# 		# collect_subdomains
+# 		# live_subs
+#     #     cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
 
-    if [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
-        echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
-        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
-    elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
-		live_subs
-        echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
-        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
-    else
-        echo -e "\e[32m[*] Running other function for run hakrawler on the live subdomains...\e[0m"
-		collect_subdomains
-		live_subs
-        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
+#     # fi
 
-    fi
-
-}
+# }
 
 
 sqli () {
@@ -205,8 +206,7 @@ xss () {
 main () {
 	# collect_subdomains
 	# live_subs
-    all_links
-	# all_link_parametr
+    all_links_domain
 	# sqli
 	# rce
 	# ssti
