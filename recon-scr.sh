@@ -20,11 +20,12 @@ mkdir -p ./$TARGET/subdomains
     echo -e "\e[34m[*] Running subfinder...\e[0m"
     subfinder -d "$TARGET" -silent | awk '{print "https://"$0}'  >  ./$TARGET/subdomains/subfinder_subs.txt
 
-    echo -e "\e[34m[*] Running findomain...\e[0m"
-    findomain -q -t "$TARGET" | awk '{print "https://"$0}' > ./$TARGET/subdomains/findomain_subs.txt
+     echo -e "\e[34m[*] Running findomain...\e[0m"
+     findomain -q -t "$TARGET" | awk '{print "https://"$0}' > ./$TARGET/subdomains/findomain_subs.txt
 
     echo -e "\e[34m[*] Running assetfinder...\e[0m"
     assetfinder -subs-only "$TARGET" | awk '{print "https://"$0}' > ./$TARGET/subdomains/assetfinder_subs.txt
+
 
 	echo -e "\e[32m[*] Extracting all subdomains...\e[0m"
     cat ./$TARGET/subdomains/*.txt | sort | uniq >> ./$TARGET/subdomains/all_subdomains.txt
@@ -50,32 +51,39 @@ live_subs() {
 	mkdir -p ./$TARGET/live_subs
     echo -e "\e[32m[*] Extracting live subdomains...\e[0m"
     echo -e "\e[34m[*] Running httpx...\e[0m"
-    httpx -silent -l ./$TARGET/subdomains/all_subdomains.txt -o ./$TARGET/live_subs/live_subdomains.txt
+    httpx -silent -l  ./$TARGET/subdomains/all_subdomains.txt -o ./$TARGET/live_subs/live_subdomains.txt -mc 200
 }
 
 # extract all URLs
-# all_links_domain() {
-# 	mkdir -p ./$TARGET/urls
-#     echo -e "\e[34m[*] Extracting all URLs...\e[0m"
-#     echo -e "\e[34m[*] Running hakrawler...\e[0m"
-# 	tar="https://$TARGET" 
-# 	echo $tar | hakrawler
-#     # if [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
-#     #     echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
-#     #     cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
-#     # elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
-# 		# live_subs
-#     #     echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
-#     #     cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
-#     # else
-#     #     echo -e "\e[32m[*] Running other function for run hakrawler on the live subdomains...\e[0m"
-# 		# collect_subdomains
-# 		# live_subs
-#     #     cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
+all_links_domain() {
+	mkdir -p ./$TARGET/urls
+    echo -e "\e[34m[*] Extracting all URLs...\e[0m"
+    echo -e "\e[34m[*] Running hakrawler...\e[0m"
+    if [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
+        echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
+        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
+        cat ./$TARGET/live_subs/live_subdomains.txt | waybackurls >> ./$TARGET/urls/all_urls.txt
+		cat ./$TARGET/urls/*  | sort | uniq > ./$TARGET/urls/all_urls.txt
 
-#     # fi
+    elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
+		live_subs
+        echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
+        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
+        cat ./$TARGET/live_subs/live_subdomains.txt | waybackurls >> ./$TARGET/urls/all_urls.txt
+		cat ./$TARGET/urls/*  | sort | uniq > ./$TARGET/urls/all_urls.txt
+    else
+        echo -e "\e[32m[*] Running other function for run hakrawler on the live subdomains...\e[0m"
+		collect_subdomains
+		live_subs
+        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
+        cat ./$TARGET/live_subs/live_subdomains.txt | waybackurls >> ./$TARGET/urls/all_urls.txt
+		cat ./$TARGET/urls/*  | sort | uniq > ./$TARGET/urls/all_urls.txt
 
-# }
+
+    fi
+
+
+}
 
 
 sqli () {
@@ -203,10 +211,14 @@ xss () {
 
 
 }
+
+
+
+
 main () {
-	# collect_subdomains
-	# live_subs
-    all_links_domain
+	collect_subdomains
+	live_subs
+    # all_links_domain
 	# sqli
 	# rce
 	# ssti
