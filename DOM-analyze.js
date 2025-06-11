@@ -28,6 +28,26 @@
     "location.assign",
     "location.replace",
     "postMessage",
+    "add",
+    "after",
+    "append",
+    "animate",
+    "insertAfter",
+    "insertBefore",
+    "before",
+    "html",
+    "prepend",
+    "replaceAll",
+    "replaceWith",
+    "wrap",
+    "wrapInner",
+    "wrapAll",
+    "has",
+    "constructor",
+    "init",
+    "index",
+    "jQuery.parseHTML",
+    "$.parseHTML",
   ];
   const jsFiles = Array.from(document.scripts)
     .map((script) => script.src)
@@ -78,10 +98,16 @@
   // Create blob
   const blob = new Blob([report], { type: "text/plain" });
 
+  // Generate origin-based filename
+  const origin = location.origin
+    .replace(/^https?:\/\//, "")
+    .replace(/[:\/]/g, "_");
+  const filename = `${origin}_open_redirect_scan.txt`;
+
   // Create download link
   const downloadLink = document.createElement("a");
   downloadLink.href = URL.createObjectURL(blob);
-  downloadLink.download = "js_scan_report.txt";
+  downloadLink.download = filename;
   downloadLink.click();
 
   // Open in new tab
