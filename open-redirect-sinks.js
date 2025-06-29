@@ -1,67 +1,32 @@
 (async () => {
-  const sources = [
+  const sinks = [
     "location",
+    "location.host",
+    "location.hostname",
     "location.href",
     "location.pathname",
     "location.search",
-    "location.hash",
-    "document.URL",
-    "document.documentURI",
-    "document.baseURI",
-    "window.name",
-    "document.referrer",
-    "document.cookie",
-  ];
-  const sinks = [
-    "document.write",
-    "document.writeln",
-    "document.domain",
-    "element.innerHTML",
-    "element.outerHTML",
-    "element.insertAdjacentHTML",
-    "element.onevent",
-    "eval",
-    "setTimeout",
-    "setInterval",
-    "location =",
-    "location.href =",
+    "location.protocol",
     "location.assign",
     "location.replace",
-    "postMessage",
-    "add",
-    "after",
-    "append",
-    "animate",
-    "insertAfter",
-    "insertBefore",
-    "before",
-    "html",
-    "prepend",
-    "replaceAll",
-    "replaceWith",
-    "wrap",
-    "wrapInner",
-    "wrapAll",
-    "has",
-    "constructor",
-    "init",
-    "index",
-    "jQuery.parseHTML",
-    "$.parseHTML",
-    "window.location",
-    "window.open",
-    "window.location.href",
+    "open",
+    "element.srcdoc",
+    "XMLHttpRequest.open",
+    "XMLHttpRequest.send",
+    "jQuery.ajax",
+    "$.ajax",
   ];
+
   const jsFiles = Array.from(document.scripts)
     .map((script) => script.src)
     .filter((src) => src && src.endsWith(".js"));
 
   if (jsFiles.length === 0) {
-    console.log("no find external .js file");
+    console.log("No external .js files found");
     return;
   }
 
-  let report = `🛡 JavaScript Source/Sink Scan Report\n\n`;
+  let report = `🛡 JavaScript Open Redirect Sink Scan Report for ${location.origin}\n\n`;
 
   for (let i = 0; i < jsFiles.length; i++) {
     const url = jsFiles[i];
@@ -72,11 +37,6 @@
       const foundMatches = [];
 
       lines.forEach((line, idx) => {
-        sources.forEach((src) => {
-          if (line.includes(src)) {
-            foundMatches.push(`[source] ${src} in line ${idx + 1}`);
-          }
-        });
         sinks.forEach((sink) => {
           if (line.includes(sink)) {
             foundMatches.push(`[sink] ${sink} in line ${idx + 1}`);
@@ -86,7 +46,7 @@
 
       report += `📄 File: ${url}\n`;
       if (foundMatches.length === 0) {
-        report += `   🟢 No source or sink found.\n\n`;
+        report += `   🟢 No open redirect sink found.\n\n`;
       } else {
         foundMatches.forEach((match) => {
           report += `   🔹 ${match}\n`;
