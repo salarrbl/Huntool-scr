@@ -1,198 +1,167 @@
-#!/bin/bash
-#
+#!/usr/bin/env bash
+
 if [ -z $1  ]; then
     echo -e "\e[31mUsage: $0 <target>\e[0m"
     echo -e "\e[31m./recon.sh --help \e[0m"
     exit 1
 fi
-cat ./wordlist/recon
-# target
-TARGET=$1
-if [ -z $TARGET ]; then
-	figlet $TARGET
-fi
+# cat ./wordlist/recon
+echo """
+__________                                       _________               
+\______   \ ____   ____  ____   ____            /   _____/______   ____  
+ |       _// __ \_/ ___\/  _ \ /    \   ______  \_____  \\_  __ \_/ ___\ 
+ |    |   \  ___/\  \__(  <_> )   |  \ /_____/  /        \|  | \/\  \___ 
+ |____|_  /\___  >\___  >____/|___|  /         /_______  /|__|    \___  >
+        \/     \/     \/           \/                  \/             \/ 
+
+"""
 # Function to collect subdomains
-collect_subdomains() {
-mkdir -p ./$TARGET/subdomains
-    echo -e "\e[34m[*] Running subfinder...\e[0m"
+f_u() {
+	# echo $2
+	mkdir -p ./$TARGET/subdomains
+    echo -e "\e[34m[*] * Running subfinder...\e[0m"
     subfinder -d "$TARGET" -silent | awk '{print "https://"$0}'  >  ./$TARGET/subdomains/subfinder_subs.txt
-     echo -e "\e[34m[*] Running findomain...\e[0m"
-     findomain -q -t "$TARGET" | awk '{print "https://"$0}' > ./$TARGET/subdomains/findomain_subs.txt
-    echo -e "\e[34m[*] Running assetfinder...\e[0m"
+    echo -e "\e[34m[*] * Running findomain...\e[0m"
+    findomain -q -t "$TARGET" | awk '{print "https://"$0}' > ./$TARGET/subdomains/findomain_subs.txt
+    echo -e "\e[34m[*] * Running assetfinder...\e[0m"
     assetfinder -subs-only "$TARGET" | awk '{print "https://"$0}' > ./$TARGET/subdomains/assetfinder_subs.txt
-	echo -e "\e[32m[*] Extracting all subdomains...\e[0m"
+	echo -e "\e[32m[*] * Extracting all uniq subdomains...\e[0m"
     cat ./$TARGET/subdomains/*.txt | sort | uniq >> ./$TARGET/subdomains/all_subdomains.txt
+	echo -e "\e[32m[*] Extracting live subdomains...\e[0m"
+    httpx -silent -l  ./$TARGET/subdomains/all_subdomains.txt -o ./$TARGET/subdomains/live_subdomains.txt
 }
-collect_subdomains_subs() {
-	mkdir -p ./sub
-    echo -e "\e[34m[*] Find subdomains  subdomains \e[0m"
+
+f_uss() {
+	echo -e "\e[34m[*] * Find subdomains  subdomains \e[0m"
 	cat ./$TARGET/subdomains/all_subdomains.txt | while ifs= read -r sub  ; do
 		echo $sub
-		subfinder -d "$sub" -silent >> ./$TARGET/subdomains/subs_subs_s.txt
-		assetfinder -subs-only "$sub" -silent >> ./$TARGET/subdomains/subs_subs_a.txt
+		subfinder -d "$sub" -silent | awk '{print "https://"$0}'  >> ./$TARGET/subdomains/subs_subs_s.txt
+		assetfinder -subs-only "$sub" -silent | awk '{print "https://"$0}'  >> ./$TARGET/subdomains/subs_subs_a.txt
+		findomain -q -t "$TARGET" | awk '{print "https://"$0}' > ./$TARGET/subdomains/findomain_subs.txt
 		cat ./$TARGET/subdomains/*  | sort | uniq > ./$TARGET/subdomains/all_subdomains.txt
 	done
+
 }
-# extract live subdomains
-live_subs() {
-	mkdir -p ./$TARGET/live_subs
-    echo -e "\e[32m[*] Extracting live subdomains...\e[0m"
-    echo -e "\e[34m[*] Running httpx...\e[0m"
-    httpx -silent -l  ./$TARGET/subdomains/all_subdomains.txt -o ./$TARGET/live_subs/live_subdomains.txt 
+
+# for read multi domains on a file
+f_fm() {
+	for t in $(cat "$TARGET"); do
+		echo "$t"
+		mkdir -p "./$t/subdomains"
+		echo "target now is $t"
+		echo -e "\e[34m[*] Running subfinder...\e[0m"
+		subfinder -d "$t" -silent | awk '{print "https://"$0}' > "./$t/subdomains/subfinder_subs.txt"
+		echo -e "\e[34m[*] Running findomain...\e[0m"
+		findomain -q -t "$t" | awk '{print "https://"$0}' > "./$t/subdomains/findomain_subs.txt"
+		echo -e "\e[34m[*] Running assetfinder...\e[0m"
+		assetfinder -subs-only "$t" | awk '{print "https://"$0}' > "./$t/subdomains/assetfinder_subs.txt"
+		echo -e "\e[32m[*] Extracting all unique subdomains...\e[0m"
+		cat "./$t/subdomains/"*.txt | sort -u > "./$t/subdomains/all_subdomains.txt"
+		echo -e "\e[34m[*] * Find subdomains  subdomains \e[0m"
+		echo -e "\e[32m[*] Extracting live subdomains...\e[0m"
+		httpx -silent -l "./$t/subdomains/all_subdomains.txt" -o "./$t/subdomains/live_subdomains.txt"
+	done
 }
-# extract all URLs
-all_links_domain() {
-	mkdir -p ./$TARGET/urls
-    echo -e "\e[34m[*] Extracting all URLs...\e[0m"
-    echo -e "\e[34m[*] Running hakrawler...\e[0m"
-    if [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
-        echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
-        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
-        cat ./$TARGET/live_subs/live_subdomains.txt | waybackurls >> ./$TARGET/urls/all_urls.txt
-		cat ./$TARGET/urls/*  | sort | uniq > ./$TARGET/urls/all_urls.txt
-    elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
-		live_subs
-        echo -e "\e[32m[*] Running hakrawler on live_subdomains...\e[0m"
-        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
-        cat ./$TARGET/live_subs/live_subdomains.txt | waybackurls >> ./$TARGET/urls/all_urls.txt
-		cat ./$TARGET/urls/*  | sort | uniq > ./$TARGET/urls/all_urls.txt
-    else
-        echo -e "\e[32m[*] Running other function for run hakrawler on the live subdomains...\e[0m"
-		collect_subdomains
-		live_subs
-        cat ./$TARGET/live_subs/live_subdomains.txt | hakrawler > ./$TARGET/urls/all_urls.txt
-        cat ./$TARGET/live_subs/live_subdomains.txt | waybackurls >> ./$TARGET/urls/all_urls.txt
-		cat ./$TARGET/urls/*  | sort | uniq > ./$TARGET/urls/all_urls.txt
-    fi
-}
-sqli () {
-	mkdir -p ./$TARGET/url_possible_vulnarblities
-	if [ -s ./$TARGET/urls/all_urls.txt ]; then
-		echo "1"
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf sqli > ./$TARGET/url_possible_vulnarblities/sqli.txt
-	elif [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
-		echo "2"
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf sqli > ./$TARGET/url_possible_vulnarblities/sqli.txt
-	elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
-		echo "3"
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf sqli > ./$TARGET/url_possible_vulnarblities/sqli.txt
-	else
-		echo "4"
-		collect_subdomains
-		# collect_subdomains_subs
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf sqli > ./$TARGET/url_possible_vulnarblities/sqli.txt
-	fi
-}
-rce () {
-	mkdir -p ./$TARGET/url_possible_vulnarblities
-	if [ -s ./$TARGET/urls/all_urls.txt ]; then
-		echo "1"
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf rce > ./$TARGET/url_possible_vulnarblities/rce.txt
-	elif [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
-		echo "2"
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf rce > ./$TARGET/url_possible_vulnarblities/rce.txt
-	elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
-		echo "3"
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf rce > ./$TARGET/url_possible_vulnarblities/rce.txt
-	else
-		echo "4"
-		collect_subdomains
-		# collect_subdomains_subs
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf rce > ./$TARGET/url_possible_vulnarblities/rce.txt
-	fi
-}
-ssti () {
-	mkdir -p ./$TARGET/url_possible_vulnarblities
-	if [ -s ./$TARGET/urls/all_urls.txt ]; then
-		echo "1"
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf ssti > ./$TARGET/url_possible_vulnarblities/ssti.txt
-	elif [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
-		echo "2"
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf ssti > ./$TARGET/url_possible_vulnarblities/ssti.txt
-	elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
-		echo "3"
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf ssti > ./$TARGET/url_possible_vulnarblities/ssti.txt
-	else
-		echo "4"
-		collect_subdomains
-		# collect_subdomains_subs
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf ssti > ./$TARGET/url_possible_vulnarblities/ssti.txt
-	fi
-}
-ssrf () {
-	mkdir -p ./$TARGET/url_possible_vulnarblities
-	if [ -s ./$TARGET/urls/all_urls.txt ]; then
-		echo "1"
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf ssrf > ./$TARGET/url_possible_vulnarblities/ssrf.txt
-	elif [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
-		echo "2"
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf ssrf > ./$TARGET/url_possible_vulnarblities/ssrf.txt
-	elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
-		echo "3"
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf ssrf > ./$TARGET/url_possible_vulnarblities/ssrf.txt
-	else
-		echo "4"
-		collect_subdomains
-		# collect_subdomains_subs
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf ssrf > ./$TARGET/url_possible_vulnarblities/ssrf.txt
-	fi
-}
-xss () {
-	mkdir -p ./$TARGET/url_possible_vulnarblities
-	if [ -s ./$TARGET/urls/all_urls.txt ]; then
-		echo "1"
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf xss > ./$TARGET/url_possible_vulnarblities/xss.txt
-	elif [ -s ./$TARGET/live_subs/live_subdomains.txt ]; then
-		echo "2"
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf xss > ./$TARGET/url_possible_vulnarblities/xss.txt
-	elif [ -s ./$TARGET/subdomains/all_subdomains.txt ]; then
-		echo "3"
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf xss > ./$TARGET/url_possible_vulnarblities/xss.txt
-	else
-		echo "4"
-		collect_subdomains
-		# collect_subdomains_subs
-		live_subs
-		all_links
-		cat ./$TARGET/urls/all_urls.txt | ~/go/bin/gf xss > ./$TARGET/url_possible_vulnarblities/xss.txt
-	fi
+
+# for multi domains and get subs subs
+f_fss() {
+	for t in $(cat "$TARGET"); do
+		echo "$t"
+		mkdir -p "./$t/subdomains"
+		echo "target now is $t"
+		echo -e "\e[34m[*] Running subfinder...\e[0m"
+		subfinder -d "$t" -silent | awk '{print "https://"$0}' > "./$t/subdomains/subfinder_subs.txt"
+		echo -e "\e[34m[*] Running findomain...\e[0m"
+		findomain -q -t "$t" | awk '{print "https://"$0}' > "./$t/subdomains/findomain_subs.txt"
+		echo -e "\e[34m[*] Running assetfinder...\e[0m"
+		assetfinder -subs-only "$t" | awk '{print "https://"$0}' > "./$t/subdomains/assetfinder_subs.txt"
+		echo -e "\e[32m[*] Extracting all unique subdomains...\e[0m"
+		cat ./$t/subdomains/all_subdomains.txt | while ifs= read -r sub  ; do
+			echo "get subdomains for this subdomains $sub"
+			subfinder -d "$sub" -silent | awk '{print "https://"$0}'  >> ./$t/subdomains/subs_subs_s.txt
+			assetfinder -subs-only "$sub" -silent | awk '{print "https://"$0}'  >> ./$t/subdomains/subs_subs_a.txt
+			findomain -q -t "$t" | awk '{print "https://"$0}' > ./$t/subdomains/findomain_subs.txt
+			cat ./$t/subdomains/*  | sort | uniq > ./$t/subdomains/all_subdomains.txt
+		done
+		cat "./$t/subdomains/"*.txt | sort -u > "./$t/subdomains/all_subdomains.txt"
+		echo -e "\e[32m[*] Extracting live subdomains...\e[0m"
+		httpx -silent -l "./$t/subdomains/all_subdomains.txt" -o "./$t/subdomains/live_subdomains.txt"
+	done
 }
 
 
 
 
-main () {
-	collect_subdomains
-	collect_subdomains_subs
-	live_subs
-    # all_links_domain
-	# sqli
-	# rce
-	# ssti
-	# ssrf
-	# xss
+# for extracting all js file and donloads and search for api keys
+f_jsu() {
+	mkdir -p ./$TARGET/JS
+	echo " * run gau and waybackurl"
+	gau "$DOMAIN" | grep '\.js' | tee ./$TARGET/gau-js.txt
+	cat "$DOMAIN" | waybackurls | grep '\.js' | tee ./$TARGET/wayback-js.txt
+	echo " * run katana"
+	katana -u "https://$DOMAIN" -silent | grep '\.js' | tee ./$TARGET/katana-js.txt
+	cat gau-js.txt katana-js.txt wayback-js.txt >> alljs.txt
+	sed -E 's/(\.js).*$/\1/' alljs.txt | sort -u > alljsclean.txt
+	rm -rf gau-js.txt katana-js.txt alljs.txt
+	echo " * Downloading JS files..."
+	while read -r url; do
+	  filename=$(basename "$url")
+	  filepath="JS/$filename"
+	  # Avoid overwriting if same filename comes from multiple sources
+	  if [ -e "$filepath" ]; then
+		hash=$(echo -n "$url" | md5sum | cut -d ' ' -f1)
+		filepath="jss/${hash}_$filename"
+	  fi
+	  # Download JS file with URL as comment
+	  echo "// $url" > "$filepath"
+	  curl -s "$url" >> "$filepath"
+	  echo "* Downloaded: $url -> $filepath"
+	done < alljsclean.txt
+
+
 }
-main
+
+
+help="""
+-us            get subdomains for a url(domain)
+-uss           get subdomains and subdomains subdomains for a url(domain)
+-fs            get subdomains for multi domain on a file
+-fss           get subdomains for multi domain on a file and subdomains for each subdomains
+-ujs           Download all js file and search api keys
+"""
+case $1 in
+	"-us")
+		TARGET=$2
+		f_u
+		;;
+	"-uss")
+		TARGET=$2
+		f_u
+		f_uss
+		;;
+	"-fs")
+		TARGET=$2
+		f_fm
+		echo "1"
+		;;
+	"-fss")
+		TARGET=$2
+		f_fss
+		;;
+	"-ujs")
+		TARGET=$2
+		f_jsu
+		;;
+	"--help")
+		echo """
+-us            get subdomains for a url(domain)
+-uss           get subdomains and subdomains subdomains for a url(domain)
+-fs            get subdomains for multi domain on a file
+-fss           get subdomains for multi domain on a file and subdomains for each subdomains
+-ujs           Download all js file and search api keys
+"""
+		;;
+	*)
+		exit
+		;;
+esac
