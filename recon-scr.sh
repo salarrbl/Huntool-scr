@@ -38,7 +38,7 @@ live_subs() {
 	mkdir -p ./$TARGET/live_subs
     echo -e "\e[32m[*] Extracting live subdomains...\e[0m"
     echo -e "\e[34m[*] Running httpx...\e[0m"
-    httpx -silent -l  ./$TARGET/subdomains/all_subdomains.txt -o ./$TARGET/live_subs/live_subdomains.txt -mc 200
+    httpx -silent -l  ./$TARGET/subdomains/all_subdomains.txt -o ./$TARGET/live_subs/live_subdomains.txt 
 }
 # extract all URLs
 all_links_domain() {
@@ -186,6 +186,7 @@ xss () {
 
 main () {
 	collect_subdomains
+	collect_subdomains_subs
 	live_subs
     # all_links_domain
 	# sqli
