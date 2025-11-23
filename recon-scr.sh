@@ -28,7 +28,8 @@ f_u() {
 	echo -e "\e[32m[*] * Extracting all uniq subdomains...\e[0m"
     cat ./$TARGET/subdomains/*.txt | sort | uniq >> ./$TARGET/subdomains/all_subdomains.txt
 	echo -e "\e[32m[*] Extracting live subdomains...\e[0m"
-    httpx -silent -l  ./$TARGET/subdomains/all_subdomains.txt -o ./$TARGET/subdomains/live_subdomains.txt
+	cat ./$TARGET/subdomains/all_subdomains.txt | dnsx -retry 10 -r ~/.resolvers -duc -silent | httpx -title -sc -duc -cdn -retries 3 -cl >  ./$TARGET/subdomains/live_subdomains.txt
+
 }
 
 f_uss() {
@@ -50,7 +51,7 @@ f_fm() {
 		mkdir -p "./$t/subdomains"
 		echo "target now is $t"
 		echo -e "\e[34m[*] Running subfinder...\e[0m"
-		subfinder -d "$t" -silent | awk '{print "https://"$0}' > "./$t/subdomains/subfinder_subs.txt"
+		subfinder  -all -d "$t" -silent | awk '{print "https://"$0}' > "./$t/subdomains/subfinder_subs.txt"
 		echo -e "\e[34m[*] Running findomain...\e[0m"
 		findomain -q -t "$t" | awk '{print "https://"$0}' > "./$t/subdomains/findomain_subs.txt"
 		echo -e "\e[34m[*] Running assetfinder...\e[0m"
@@ -59,7 +60,8 @@ f_fm() {
 		cat "./$t/subdomains/"*.txt | sort -u > "./$t/subdomains/all_subdomains.txt"
 		echo -e "\e[34m[*] * Find subdomains  subdomains \e[0m"
 		echo -e "\e[32m[*] Extracting live subdomains...\e[0m"
-		httpx -silent -l "./$t/subdomains/all_subdomains.txt" -o "./$t/subdomains/live_subdomains.txt"
+ 		cat ./$t/subdomains/all_subdomains.txt | dnsx -retry 10 -r ~/.resolvers -duc -silent | httpx -title -sc -duc -cdn -retries 3 -cl >  ./$t/subdomains/live_subdomains.txt
+		# httpx -silent -l "./$t/subdomains/all_subdomains.txt" -o "./$t/subdomains/live_subdomains.txt"
 	done
 }
 
