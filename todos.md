@@ -1,1 +1,2 @@
 - [ ] add crt.sh for sub
+- [ ] add subs from waybackmachine
