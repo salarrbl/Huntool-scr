@@ -7,7 +7,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-BATCH_SIZE=50
+BATCH_SIZE=30
 MAX_RETRIES=3
 INPUT_FILE="${1:-cidrs.txt}"
 
@@ -25,7 +25,7 @@ fetch_with_retry() {
     local cidr="$1"
     local retry=0
     local FILENAME=$(sanitize_cidr "$cidr")
-    local URL="https://rapiddns.io/s/$cidr?full=1"
+    local URL="https://rapiddns.io/s/$cidr?full=1"  # 🔥 فاصله اضافی حذف شد!
 
     while [[ $retry -lt $MAX_RETRIES ]]; do
         echo -e "${BLUE}📥 Attempt $((retry+1)) for: $cidr${NC}"
@@ -39,7 +39,7 @@ fetch_with_retry() {
                 grep -E '\.' | \
                 grep -vE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | \
                 sort -u | \
-                sed 's/^/https:\/\//' > "$FILENAME.domains"
+                sed 's|^|https://|' > "$FILENAME.domains"  # better syntax
 
             local count=$(wc -l < "$FILENAME.domains" 2>/dev/null || echo 0)
             if [[ "$count" -gt 0 ]]; then
@@ -49,28 +49,29 @@ fetch_with_retry() {
                 rm -f "$FILENAME.domains" 2>/dev/null
             fi
             rm -f "$FILENAME"
-            return 0  # Success
+            return 0
 
-        elif [[ "$HTTP_CODE" == "403" || "$HTTP_CODE" == "429" || "$HTTP_CODE" == "503" ]]; then
+        elif [[ "$HTTP_CODE" == "403" || "$HTTP_CODE" == "429" || "$HTTP_CODE" == "503" || "$HTTP_CODE" == "500" || "$HTTP_CODE" == "502" ]]; then
             retry=$((retry + 1))
             if [[ $retry -lt $MAX_RETRIES ]]; then
-                DELAY_SEC=$((300 + RANDOM % 301))  # 5 to 10 minutes
-                echo -e "${RED}🔥 Cloudflare detected on $cidr (HTTP $HTTP_CODE). Retry $retry/$MAX_RETRIES after $((DELAY_SEC / 60))m ${RED}...${NC}"
+                DELAY_SEC=$((300 + RANDOM % 301))
+                echo -e "${RED}🔥 Server error or rate-limit (HTTP $HTTP_CODE) on $cidr. Retry $retry/$MAX_RETRIES after $((DELAY_SEC / 60))m...${NC}"
                 sleep "$DELAY_SEC"
             else
-                echo -e "${RED}🛑 Max retries ($MAX_RETRIES) reached for $cidr. Skipping.${NC}"
+                echo -e "${RED}🛑 Max retries ($MAX_RETRIES) reached for $cidr (last code: $HTTP_CODE). Skipping.${NC}"
                 rm -f "$FILENAME" 2>/dev/null
                 return 1
             fi
         else
-            echo -e "  ⚠️ HTTP $HTTP_CODE – Skipping $cidr"
+            # Other errors (404, etc.) → skip immediately
+            echo - e "  ⚠️ HTTP $HTTP_CODE – Skipping $cidr permanently."
             rm -f "$FILENAME" 2>/dev/null
             return 1
         fi
     done
 }
 
-# Load CIDRs
+# Load and validate CIDRs
 mapfile -t CIDRS < <(grep -v '^[[:space:]]*#' "$INPUT_FILE" | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$')
 
 if [[ ${#CIDRS[@]} -eq 0 ]]; then
@@ -93,12 +94,11 @@ while [[ $i -lt ${#CIDRS[@]} ]]; do
         fetch_with_retry "${CIDRS[j]}" &
     done
 
-    wait  # Wait for all in batch to finish
+    wait
 
-    # Delay between batches (only if more batches remain)
     if [[ $((i + BATCH_SIZE)) -lt ${#CIDRS[@]} ]]; then
-        DELAY=$((60 + RANDOM % 61))  # 1–2 minutes
-        echo -e "${BLUE}⏳ Sleeping $DELAY seconds between batches...${NC}"
+        DELAY=$((60 + RANDOM % 61))
+        echo -e "${BLUE}⏳ Sleeping $DELAY seconds before next batch...${NC}"
         sleep "$DELAY"
     fi
 
