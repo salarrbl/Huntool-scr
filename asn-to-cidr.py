@@ -12,7 +12,7 @@ def get_cidrs_from_asn(asn):
         return []
 
 # Read ASNs from file and get CIDRs
-with open('', 'r') as f:
+with open('asn.numbers', 'r') as f:
     asns = [line.strip() for line in f if line.strip()]
 
 all_cidrs = []
