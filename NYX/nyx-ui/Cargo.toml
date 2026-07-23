@@ -1,0 +1,17 @@
+[package]
+name = "nyx-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nyx-common = { path = "../nyx-common" }
+nyx-core = { path = "../nyx-core" }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
