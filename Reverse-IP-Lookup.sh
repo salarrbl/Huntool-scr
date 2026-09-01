@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Colors
 RED='\033[0;31m'
@@ -25,23 +25,23 @@ fetch_with_retry() {
     local cidr="$1"
     local retry=0
     local FILENAME=$(sanitize_cidr "$cidr")
-    local URL="https://rapiddns.io/s/$cidr?full=1"  # 🔥 فاصله اضافی حذف شد!
+    local URL="https://rapiddns.io/s/$cidr?full=1" # 🔥 فاصله اضافی حذف شد!
 
     while [[ $retry -lt $MAX_RETRIES ]]; do
-        echo -e "${BLUE}📥 Attempt $((retry+1)) for: $cidr${NC}"
+        echo -e "${BLUE}📥 Attempt $((retry + 1)) for: $cidr${NC}"
 
         HTTP_CODE=$(curl -s -A "Mozilla/5.0" -w "%{http_code}" -o "$FILENAME" "$URL")
 
         if [[ "$HTTP_CODE" == "200" ]]; then
             # Extract domains
-            grep -oP '<td>\K[^<]*\.[^<]*\.[^<]*[^<]*</td>' "$FILENAME" 2>/dev/null | \
-                sed 's/<\/\?td>//g' | \
-                grep -E '\.' | \
-                grep -vE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | \
-                sort -u | \
-                sed 's|^|https://|' > "$FILENAME.domains"  # better syntax
+            grep -oP '<td>\K[^<]*\.[^<]*\.[^<]*[^<]*</td>' "$FILENAME" 2>/dev/null |
+                sed 's/<\/\?td>//g' |
+                grep -E '\.' |
+                grep -vE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' |
+                sort -u |
+                sed 's|^|https://|' >"$FILENAME.domains" # better syntax
 
-            local count=$(wc -l < "$FILENAME.domains" 2>/dev/null || echo 0)
+            local count=$(wc -l <"$FILENAME.domains" 2>/dev/null || echo 0)
             if [[ "$count" -gt 0 ]]; then
                 echo -e "  ${GREEN}✅ Found $count domains → $FILENAME.domains${NC}"
             else
@@ -83,14 +83,14 @@ echo -e "${BLUE}🚀 Starting batch processing (${#CIDRS[@]} CIDRs, batch size: 
 
 i=0
 while [[ $i -lt ${#CIDRS[@]} ]]; do
-    batch_end=$(( i + BATCH_SIZE ))
+    batch_end=$((i + BATCH_SIZE))
     if [[ $batch_end -gt ${#CIDRS[@]} ]]; then
         batch_end=${#CIDRS[@]}
     fi
 
-    echo -e "${YELLOW}📦 Batch $((i+1))–$batch_end of ${#CIDRS[@]}${NC}"
+    echo -e "${YELLOW}📦 Batch $((i + 1))–$batch_end of ${#CIDRS[@]}${NC}"
 
-    for (( j=i; j<batch_end; j++ )); do
+    for ((j = i; j < batch_end; j++)); do
         fetch_with_retry "${CIDRS[j]}" &
     done
 
