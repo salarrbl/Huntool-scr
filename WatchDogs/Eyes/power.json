@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "concurrency": 12,
+  "timeout_seconds": 15,
+  "format": "png",
+  "output_dir": "Eyes/Screenshot",
+  "allowed_ports": ["443", "8080"],
+  "ignored_ports": ["80"],
+  "skip_styles": true,
+  "no_ads": true,
+  "disable_security": false,
+  "fast_mode": true
+}

@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+
+# ── Configuration ────────────────────────────────────────────────────────────
+
+INTIGRITI_BASE_URL = "https://api.intigriti.com/external/researcher/v1"
+INTIGRITI_LIMIT = 500
+H1_BASE_URL = "https://api.hackerone.com/v1/hackers/programs"
+
+OUTPUT_FILE = "unCooked.json"
+INPUT_FILE = "targets.json"
+
+
+# ── .env Loader ──────────────────────────────────────────────────────────────
+
+
+def load_env_file():
+    """Load .env from parent directory, fallback to current directory."""
+    current_dir = Path(__file__).resolve().parent
+    parent_dir = current_dir.parent
+
+    for env_dir in [parent_dir, current_dir]:
+        env_path = env_dir / ".env"
+        if env_path.exists():
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        key, value = line.split("=", 1)
+                        key = key.strip()
+                        value = value.strip().strip('\'""')
+                        if key not in os.environ:
+                            os.environ[key] = value
+            return
+
+    print("[!] No .env file found in parent or current directory", file=sys.stderr)
+
+
+# ── Intigriti ────────────────────────────────────────────────────────────────
+
+
+def intigriti_fetch_all_programs(token):
+    """Paginate through Intigriti programs."""
+    all_programs = []
+    offset = 0
+
+    while True:
+        url = f"{INTIGRITI_BASE_URL}/programs?limit={INTIGRITI_LIMIT}&offset={offset}"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            print(
+                f"[!] Intigriti list fetch failed at offset {offset}: {e}",
+                file=sys.stderr,
+            )
+            break
+
+        records = data.get("records", [])
+        if not records:
+            break
+
+        all_programs.extend(records)
+        offset += INTIGRITI_LIMIT
+
+        if offset > 10000:
+            break
+
+    return all_programs
+
+
+def intigriti_fetch_program_detail(program_id, token):
+    """Fetch detailed scope for a single Intigriti program."""
+    url = f"{INTIGRITI_BASE_URL}/programs/{program_id}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def intigriti_fetch_scope(handle, token):
+    """Fetch scope for an Intigriti program by handle/name."""
+    programs = intigriti_fetch_all_programs(token)
+
+    matched = None
+    search = handle.lower()
+    for p in programs:
+        if search in p.get("name", "").lower() or search in p.get("handle", "").lower():
+            matched = p
+            break
+
+    if not matched:
+        print(f"[!] Intigriti: no program found for '{handle}'", file=sys.stderr)
+        return None
+
+    detail = intigriti_fetch_program_detail(matched["id"], token)
+
+    in_scope = []
+    out_of_scope = []
+
+    for domain in detail.get("domains", {}).get("content", []) or []:
+        endpoint = domain.get("endpoint", "").strip()
+        tier = (domain.get("tier", {}).get("value") or "").lower()
+
+        if not endpoint:
+            continue
+
+        if tier == "out of scope":
+            out_of_scope.append(endpoint)
+        else:
+            in_scope.append(endpoint)
+
+    return {
+        "platform": "intigriti",
+        "domain": matched["handle"],
+        "name": matched["name"],
+        "in_scope": in_scope,
+        "out_of_scope": out_of_scope,
+    }
+
+
+# ── HackerOne ──────────────────────────────────────────────────────────────────
+
+
+def h1_fetch_scope(handle, token):
+    """Fetch scope for a HackerOne program by handle."""
+    curl_cmd = [
+        "torsocks",
+        "curl",
+        "-s",
+        "--max-time",
+        "30",
+        f"{H1_BASE_URL}/{handle}",
+        "-H",
+        f"Authorization: Basic {token}",
+    ]
+
+    try:
+        result = subprocess.run(
+            curl_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(
+            f"[!] HackerOne: failed to fetch '{handle}': {e.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return None
+    except FileNotFoundError:
+        print("[!] curl not found in PATH", file=sys.stderr)
+        return None
+
+    try:
+        response_json = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        print(f"[!] HackerOne: invalid JSON for '{handle}': {e}", file=sys.stderr)
+        return None
+
+    program_name = (
+        response_json.get("data", {})
+        .get("attributes", {})
+        .get("name", "Unknown Program")
+    )
+
+    in_scope = []
+    out_of_scope = []
+
+    for scope in (
+        response_json.get("relationships", {})
+        .get("structured_scopes", {})
+        .get("data", [])
+    ):
+        attributes = scope.get("attributes", {})
+        asset = attributes.get("asset_identifier")
+        if not asset:
+            continue
+
+        if attributes.get("eligible_for_bounty"):
+            in_scope.append(asset)
+        else:
+            out_of_scope.append(asset)
+
+    return {
+        "platform": "hackerone",
+        "domain": handle,
+        "name": program_name,
+        "in_scope": in_scope,
+        "out_of_scope": out_of_scope,
+    }
+
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+
+
+def load_targets(path):
+    """Load and validate targets.json."""
+    if not Path(path).exists():
+        sys.exit(f"[✗] Input file not found: {path}")
+
+    with open(path, "r") as f:
+        data = json.load(f)
+
+    if not isinstance(data, dict):
+        sys.exit(
+            "[✗] targets.json must be a JSON object with 'hackerone' and/or 'intigriti' keys."
+        )
+
+    return data
+
+
+def save_output(results, path):
+    """Write results to JSON file."""
+    with open(path, "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"[✓] Saved {len(results)} program(s) to {path}", file=sys.stderr)
+
+
+def main():
+    # ── Load .env first ──────────────────────────────────────────────────────
+    load_env_file()
+
+    # ── Load targets ─────────────────────────────────────────────────────────
+    targets = load_targets(INPUT_FILE)
+
+    # ── Load tokens ──────────────────────────────────────────────────────────
+    intigriti_token = os.environ.get("INTIGRITI_TOKEN")
+    # FIXED: Use exact same env var name as your original working code
+    h1_token = os.environ.get("Hackerone_Token")
+
+    if not intigriti_token:
+        print(
+            "[!] Warning: INTIGRITI_TOKEN not set — skipping Intigriti targets",
+            file=sys.stderr,
+        )
+    if not h1_token:
+        print(
+            "[!] Warning: Hackerone_Token not set — skipping HackerOne targets",
+            file=sys.stderr,
+        )
+
+    # ── Process ──────────────────────────────────────────────────────────────
+    all_results = []
+
+    # Intigriti
+    inti_handles = targets.get("intigriti", [])
+    if inti_handles and intigriti_token:
+        if isinstance(inti_handles, str):
+            inti_handles = [inti_handles]
+        for handle in inti_handles:
+            handle = handle.strip()
+            if not handle:
+                continue
+            result = intigriti_fetch_scope(handle, intigriti_token)
+            if result:
+                all_results.append(result)
+                print(f"[+] Intigriti: {result['domain']}", file=sys.stderr)
+
+    # HackerOne
+    h1_handles = targets.get("hackerone", [])
+    if h1_handles and h1_token:
+        if isinstance(h1_handles, str):
+            h1_handles = [h1_handles]
+        for handle in h1_handles:
+            handle = handle.strip()
+            if not handle:
+                continue
+            result = h1_fetch_scope(handle, h1_token)
+            if result:
+                all_results.append(result)
+                print(f"[+] HackerOne: {result['domain']}", file=sys.stderr)
+
+    # ── Save ─────────────────────────────────────────────────────────────────
+    if all_results:
+        save_output(all_results, OUTPUT_FILE)
+    else:
+        print("[!] No results fetched.", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+curl -L "https://ip.thc.org/api/v1/subdomains/download?domain=$1" -H 'Accept: text/csv' -s

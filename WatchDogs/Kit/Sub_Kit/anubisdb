@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+curl "https://anubisdb.com/anubis/subdomains/$1" -s | jq -r '.[]'

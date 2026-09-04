@@ -1,0 +1,92 @@
+[
+  {
+    "name": "subfinder",
+    "command": "subfinder",
+    "args": ["-d", "{{target}}", "-silent"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": true,
+    "retries": 3
+  },
+  {
+    "name": "findomain",
+    "command": "findomain",
+    "args": ["-t", "{{target}}", "-q"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": true,
+    "retries": 3
+  },
+  {
+    "name": "chaos",
+    "command": "chaos",
+    "args": ["-d", "{{target}}", "-silent"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": true,
+    "retries": 3
+  },
+  {
+    "name": "anubisdb",
+    "command": "sh",
+    "args": ["-c", "./Kit/Sub_Kit/anubisdb '{{target}}'"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": true,
+    "retries": 3
+  },
+  {
+    "name": "hackerstarget",
+    "command": "sh",
+    "args": ["-c", "./Kit/Sub_Kit/hackerstarget '{{target}}'"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": true,
+    "retries": 3
+  },
+  {
+    "name": "rapidns",
+    "command": "sh",
+    "args": ["-c", "./Kit/Sub_Kit/rapidns '{{target}}'"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": true,
+    "retries": 3
+  },
+  {
+    "name": "commoncrawl",
+    "command": "sh",
+    "args": ["-c", "./Kit/Sub_Kit/commoncrawl -d '{{target}}' --years all"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": false,
+    "retries": 3
+  },
+  {
+    "name": "crtsh",
+    "command": "sh",
+    "args": ["-c", "./Kit/Sub_Kit/crtsh '{{target}}' -cn"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": true,
+    "retries": 3
+  },
+  {
+    "name": "thc",
+    "command": "sh",
+    "args": ["-c", "./Kit/Sub_Kit/thc '{{target}}'"],
+    "timeout_seconds": 300,
+    "priority": 0,
+    "enabled": true,
+    "retries": 3
+  },
+  {
+    "name": "Naabu",
+    "command": "naabu",
+    "args": ["-l", "{{target}}", "-top-ports", "100", "-silent", "-json"],
+    "timeout_seconds": 10800,
+    "priority": 4,
+    "enabled": true,
+    "retries": 1
+  }
+]

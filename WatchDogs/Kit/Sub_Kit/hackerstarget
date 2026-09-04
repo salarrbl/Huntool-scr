@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+curl -s "https://api.hackertarget.com/hostsearch/?q=$1" | cut -d ',' -f1
