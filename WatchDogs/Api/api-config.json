@@ -1,7 +1,0 @@
-{
-  "enabled": false,
-  "port": 8080,
-  "db_uri": "mongodb://localhost:27017/watchdogs",
-  "vps_address": "185.221.237.28",
-  "api_key": "Crows0_1e922512-8a0f-453c-e17b-f89b698c1b18_1781166952675" 
-}
