@@ -328,7 +328,16 @@ func commonHeaderCodeToName(code uint16) string {
 	return fmt.Sprintf("Unknown-0x%04X", code)
 }
 
-// ─── Detection Logic ───
+// ─── Scan Result with vulnerability details ───
+
+type VulnTarget struct {
+	Host       string
+	Port       int
+	FilePath   string
+	BodyLength int
+	Took       time.Duration
+	Timestamp  time.Time
+}
 
 type ScanResult struct {
 	Host       string
@@ -653,6 +662,7 @@ func main() {
 
 	// Run scans with worker pool
 	results := make(chan ScanResult, len(targets))
+	vulnTargets := make(chan VulnTarget, len(targets))
 	jobs := make(chan string, len(targets))
 	timeoutDur := time.Duration(timeout) * time.Second
 
@@ -675,6 +685,16 @@ func main() {
 				// Port is open, run the AJP detection
 				r := detectGhostcat(host, port, timeoutDur)
 				results <- r
+				// If vulnerable, send to vulnTargets channel
+				if r.Vulnerable {
+					vulnTargets <- VulnTarget{
+						Host:       r.Host,
+						Port:       r.Port,
+						BodyLength: r.BodyLength,
+						Took:       r.Took,
+						Timestamp:  time.Now(),
+					}
+				}
 			}
 		}()
 	}
@@ -695,6 +715,8 @@ func main() {
 
 	// Collect and display results
 	var vulnCount, openCount, closedCount, errCount int
+	// Track unique vulnerable targets
+	vulnSet := make(map[string]VulnTarget)
 	for r := range results {
 		printResult(r, verbose)
 		if r.Error != "" {
@@ -705,6 +727,17 @@ func main() {
 			}
 		} else if r.Vulnerable {
 			vulnCount++
+			// Store in vulnSet for summary (dedup by host:port)
+			key := fmt.Sprintf("%s:%d", r.Host, r.Port)
+			if _, exists := vulnSet[key]; !exists {
+				vulnSet[key] = VulnTarget{
+					Host:       r.Host,
+					Port:       r.Port,
+					BodyLength: r.BodyLength,
+					Took:       r.Took,
+					Timestamp:  time.Now(),
+				}
+			}
 		} else {
 			openCount++
 		}
@@ -734,6 +767,19 @@ func main() {
 	if errCount > 0 {
 		fmt.Printf("    %s🟡 Errors:          %d%s\n", clrYellow, errCount, clrReset)
 	}
+
+	// Print vulnerable targets count
+	if len(vulnSet) > 0 {
+		fmt.Printf("\n  %s📁 Vulnerable Targets Found: %d%s\n", clrRed, len(vulnSet), clrReset)
+		fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", clrSurface1, clrReset)
+		fmt.Printf("  %s%-35s %sStatus%s\n", clrBold, "Target", clrReset, clrReset)
+		for key, v := range vulnSet {
+			fmt.Printf("  %s⚠ %-33s %sVULNERABLE (AJP %d, %d bytes)%s\n",
+				clrRed, key, clrReset, v.Port, v.BodyLength, clrReset)
+		}
+		fmt.Println()
+	}
+
 	if outputFile != "" {
 		fmt.Printf("    %s📁 Results saved:   %s%s%s\n", clrSky, clrYellow, outputFile, clrReset)
 	}
