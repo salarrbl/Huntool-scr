@@ -1,17 +1,18 @@
 // Package cidr parses target specifications (IPv4, CIDR, ASN, ranges and
-// wildcards) from command-line arguments and input files, and expands them
-// into a deduplicated, sorted list of individual IPv4 addresses.
+// wildcards) from command-line arguments and input files and normalises them
+// into a deduplicated, ascending set of IPv4 address ranges.
 //
 // No external libraries are used: everything is stdlib only. Addresses are
 // represented internally as uint32 values (big-endian byte order) so that
-// expansion and deduplication stay fast even for tens of millions of IPs.
+// deduplication and iteration stay fast even for tens of millions of IPs, and
+// so that a target list never has to be expanded into a slice of addresses —
+// see spans.go for the streaming side of that.
 package cidr
 
 import (
 	"bufio"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -410,48 +411,36 @@ func parseASNNumber(s string) (uint64, bool) {
 	return n, true
 }
 
-// Expand flattens the spans into a deduplicated, sorted slice of individual
-// IPv4 addresses. Overlapping and duplicate ranges collapse naturally.
-// maxIPs is a safety cap: expansion fails before allocating if the total
-// would exceed it (this also rejects runaway ranges such as /0 or /1).
+// Expand flattens the spans into a deduplicated, ascending slice of individual
+// IPv4 addresses. Overlapping and duplicate ranges collapse (the cap is
+// checked against the *distinct* address count).
+//
+// WARNING: this materialises every address — 4 bytes each plus the memory the
+// caller needs for them — and is therefore only meant for small target sets
+// (unit tests, scripts that want a plain []uint32). The scanner itself never
+// calls it: it streams the addresses straight out of the merged spans with
+// IterateSpans, which keeps memory flat for /8 and larger ranges.
 func Expand(spans []Span, maxIPs uint64) ([]uint32, error) {
-	var total uint64
-	for _, sp := range spans {
-		total += sp.Count()
-		if total > maxIPs {
-			return nil, fmt.Errorf("expanded set exceeds the safety cap of %d IPs (raise --max-ips if this is intended)", maxIPs)
-		}
+	merged := MergeSpans(spans)
+	total := countMergedIPs(merged)
+	if total > maxIPs {
+		return nil, fmt.Errorf("expanded set exceeds the safety cap of %d IPs (raise --max-ips if this is intended)", maxIPs)
 	}
 	if total == 0 {
 		return nil, fmt.Errorf("no IP addresses to scan")
 	}
-
-	hint := total
-	if hint > 4<<20 { // don't pre-allocate buckets for gigantic sets
-		hint = 4 << 20
-	}
-	seen := make(map[uint32]struct{}, int(hint))
-	for _, sp := range spans {
-		for ip := sp.Start; ; {
-			seen[ip] = struct{}{}
-			if ip == sp.End {
-				break
-			}
-			ip++
-		}
+	if total > uint64(maxInt) {
+		return nil, fmt.Errorf("expanded set of %d IPs does not fit in memory on this platform", total)
 	}
 
-	out := make([]uint32, 0, len(seen))
-	for ip := range seen {
+	out := make([]uint32, 0, int(total))
+	IterateSpans(merged, Shard{}, func(ip uint32) bool {
 		out = append(out, ip)
-	}
-	sort.Sort(u32Slice(out))
+		return true
+	})
 	return out, nil
 }
 
-// u32Slice implements sort.Interface for []uint32.
-type u32Slice []uint32
-
-func (s u32Slice) Len() int           { return len(s) }
-func (s u32Slice) Less(i, j int) bool { return s[i] < s[j] }
-func (s u32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+// maxInt is the largest value an int can hold on the target platform; it
+// guards make([]T, n) against 32-bit overflow.
+const maxInt = int64(^uint(0) >> 1)
