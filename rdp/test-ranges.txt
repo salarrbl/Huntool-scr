@@ -1,0 +1,11 @@
+# Test CIDR ranges
+192.168.1.0/30
+192.168.1.4/31
+192.168.1.6/32
+# Duplicate to test dedup
+192.168.1.0/30
+
+# Invalid entries to test error handling
+999.999.999.999/24
+not-an-ip
+10.0.0.1/99
