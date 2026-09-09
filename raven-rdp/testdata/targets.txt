@@ -1,0 +1,6 @@
+# RavenRDP sample targets — authorized systems only
+127.0.0.1:9001
+127.0.0.1:9002
+192.0.2.10
+127.0.0.1:9001
+

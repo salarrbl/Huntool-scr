@@ -1,0 +1,8 @@
+# Build artifacts
+/raven-rdp
+/dist/
+*.test
+*.out
+
+# Coverage
+coverage/
