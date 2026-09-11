@@ -179,3 +179,17 @@ func TestSummaryRender(t *testing.T) {
 		}
 	}
 }
+
+// TestSummaryShowsDroppedEvents pins N7: the final summary must
+// surface events that never reached the reports.
+func TestSummaryShowsDroppedEvents(t *testing.T) {
+	var buf bytes.Buffer
+	c := NewConsole(&buf, false, false)
+	c.Summary(Summary{Targets: 2, Dropped: 7, Duration: time.Second})
+	out := buf.String()
+	for _, want := range []string{"Dropped events", "7"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("summary missing %q:\n%s", want, out)
+		}
+	}
+}

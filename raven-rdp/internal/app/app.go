@@ -24,9 +24,18 @@ import (
 
 // App is one audit run: configuration, logging and wiring.
 type App struct {
-	cfg   Config
-	log   *slog.Logger
-	color bool
+	cfg Config
+	log *slog.Logger
+}
+
+// streamColor reports whether ANSI colour is appropriate for w: the
+// stream must be a terminal and NO_COLOR must be unset.
+//
+// N5: this is decided per stream, not once for the process. The
+// console renderer writes to stderr, so a decision taken on stdout
+// wrote escape sequences into a redirected log file.
+func streamColor(w *os.File) bool {
+	return term.IsTerminal(int(w.Fd())) && os.Getenv("NO_COLOR") == ""
 }
 
 // New validates cfg and builds the App.
@@ -46,9 +55,7 @@ func New(cfg Config) (*App, error) {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	color := term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("NO_COLOR") == ""
-
-	return &App{cfg: cfg, log: log, color: color}, nil
+	return &App{cfg: cfg, log: log}, nil
 }
 
 // Run executes the full lifecycle and returns a process exit code:
@@ -84,10 +91,12 @@ func (a *App) Run(parent context.Context) int {
 		return 1
 	}
 
-	console := output.NewConsole(os.Stderr, a.color, cfg.Quiet)
+	// N5: the console renderer writes to stderr, so colour is decided
+	// on stderr; the TUI below writes to stdout and decides there.
+	console := output.NewConsole(os.Stderr, streamColor(os.Stderr), cfg.Quiet)
 
 	if cfg.TUI && term.IsTerminal(int(os.Stdout.Fd())) {
-		return a.runTUI(parent, eng, reader, console, jw, cw, len(users), pws.Len())
+		return a.runTUI(parent, eng, reader, jw, cw)
 	}
 	if cfg.TUI {
 		a.log.Info("stdout is not a TTY; falling back to line output")
@@ -235,7 +244,11 @@ func (a *App) runConsole(parent context.Context, eng *engine.Engine, reader *inp
 }
 
 // runTUI is the interactive Bubble Tea mode.
-func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.TargetReader, console *output.Console, jw *output.JSONWriter, cw *output.CSVWriter, userCount, passCount int) int {
+//
+// N6: the console renderer and the credential counts were dead
+// parameters here — the TUI renders its own summary from the engine
+// metrics — so they are no longer passed.
+func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.TargetReader, jw *output.JSONWriter, cw *output.CSVWriter) int {
 	cfg := a.cfg
 
 	ctx, cancel := context.WithCancel(parent)
@@ -370,6 +383,7 @@ func (a *App) printFinalSummary(console *output.Console, eng *engine.Engine, rea
 		AuthTimeout:    met.AuthTimeout.Load(),
 		AuthError:      met.AuthError.Load(),
 		Cancelled:      met.Cancelled.Load(),
+		Dropped:        met.Dropped.Load(),
 		LimitReached:   met.LimitReached.Load(),
 		RateNotices:    met.RateNotices.Load(),
 		Users:          userCount,

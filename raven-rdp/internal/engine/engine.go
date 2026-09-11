@@ -64,6 +64,11 @@ type Metrics struct {
 	Cancelled    atomic.Int64
 	RateNotices  atomic.Int64
 	LimitReached atomic.Int64
+
+	// N7: Dropped counts events that never reached the stream — the
+	// run was cancelled (emit drops rather than block a worker) or
+	// Run had already closed the stream.
+	Dropped atomic.Int64
 }
 
 // MarkStart records the moment the run began. It is safe to call

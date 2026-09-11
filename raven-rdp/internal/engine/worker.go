@@ -200,7 +200,8 @@ func (e *Engine) finishJob(ctx context.Context, job *Job) {
 // emit appends an event to the stream. It blocks only while the event
 // consumer is stalled and the run is live, which applies backpressure
 // to workers instead of dropping results. When the run context is
-// done, the event is dropped rather than blocking a worker forever.
+// done, the event is dropped rather than blocking a worker forever;
+// every drop is counted in Metrics.Dropped.
 func (e *Engine) emit(ctx context.Context, status rdp.Status, target, username, message string, duration time.Duration) {
 	ev := Event{
 		Time: time.Now(), Target: target, Status: status, Username: username,
@@ -212,10 +213,17 @@ func (e *Engine) emit(ctx context.Context, status rdp.Status, target, username, 
 	e.eventsMu.RLock()
 	defer e.eventsMu.RUnlock()
 	if e.eventsClosed {
+		// N7: the stream is gone because Run already unwound; account
+		// for the loss instead of panicking on a closed channel.
+		e.metrics.Dropped.Add(1)
 		return
 	}
 	select {
 	case e.events <- ev:
 	case <-ctx.Done():
+		// N7: a cancelled run drops rather than blocks, so the
+		// terminal events of in-flight work are lost; record that it
+		// happened instead of failing silently.
+		e.metrics.Dropped.Add(1)
 	}
 }

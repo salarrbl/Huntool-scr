@@ -186,6 +186,7 @@ func (m *Model) renderDone() string {
 		AuthTimeout: met.AuthTimeout.Load(),
 		AuthError:   met.AuthError.Load(),
 		Cancelled:   met.Cancelled.Load(),
+		Dropped:     met.Dropped.Load(),
 		Duration:    met.Elapsed(),
 	}
 
