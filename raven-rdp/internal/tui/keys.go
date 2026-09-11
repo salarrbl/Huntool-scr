@@ -48,6 +48,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.state == StateStopping || m.state == StateDone {
 				return m, tea.Quit
 			}
+			// N3: quitting from inside the TUI is a graceful stop,
+			// not an interrupt, even though it cancels the run.
+			m.viaSignal = false
 			m.Stop()
 			return m, nil
 		case "p":

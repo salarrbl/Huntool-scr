@@ -23,6 +23,12 @@ const eventBuffer = 512
 // queueBuffer bounds how many targets/jobs may wait in each stage.
 const queueBuffer = 1024
 
+// cancelGrace is how long a cancelled run waits for its workers to
+// unwind before returning without them. Cooperative workers finish in
+// microseconds; the bound exists so a client stuck inside a blocking
+// call cannot hold the process open.
+const cancelGrace = time.Second
+
 // Event is one observable outcome of the audit. Passwords are never
 // part of an event; only usernames (which are not secrets) appear.
 type Event struct {
@@ -37,7 +43,10 @@ type Event struct {
 // Metrics holds race-free run statistics. All counters are atomic and
 // may be read at any time.
 type Metrics struct {
-	Start time.Time
+	// N1: the start time is written by Engine.Run and read from the
+	// TUI goroutine on every tick, so it must be atomic; a plain
+	// time.Time field is a data race.
+	start atomic.Pointer[time.Time]
 
 	Targets     atomic.Int64 // accepted targets fed to the engine
 	Completed   atomic.Int64 // targets whose lifecycle is finished
@@ -55,14 +64,25 @@ type Metrics struct {
 	Cancelled    atomic.Int64
 	RateNotices  atomic.Int64
 	LimitReached atomic.Int64
+
+	// N7: Dropped counts events that never reached the stream — the
+	// run was cancelled (emit drops rather than block a worker) or
+	// Run had already closed the stream.
+	Dropped atomic.Int64
 }
 
-// Elapsed returns wall time since the run started.
+// MarkStart records the moment the run began. It is safe to call
+// concurrently with the readers below.
+func (m *Metrics) MarkStart(t time.Time) { m.start.Store(&t) }
+
+// Elapsed returns wall time since the run started. It returns 0
+// before the run has been started.
 func (m *Metrics) Elapsed() time.Duration {
-	if m.Start.IsZero() {
+	p := m.start.Load()
+	if p == nil {
 		return 0
 	}
-	return time.Since(m.Start)
+	return time.Since(*p)
 }
 
 // AttemptsPerSec returns the average attempt rate. It returns 0 only
@@ -149,6 +169,12 @@ type Engine struct {
 	targetQueue *Queue[rdp.Target]
 	authQueue   *Queue[*Job]
 
+	// eventsMu guards the stream close. Run can return (on cancel)
+	// while a client is still wedged inside a call; that worker's
+	// later emit must be a no-op, not a send on a closed channel.
+	eventsMu     sync.RWMutex
+	eventsClosed bool
+
 	metrics Metrics
 	gate    pauseGate
 
@@ -205,6 +231,19 @@ func (e *Engine) trackJobEnd() {
 // Events returns the read-only event stream (closed when Run returns).
 func (e *Engine) Events() <-chan Event { return e.events }
 
+// closeEvents closes the event stream exactly once. Any emit that
+// arrives after this point is dropped rather than panicking on a send
+// to a closed channel, which is what a worker wedged inside a client
+// call would otherwise do once Run has already returned.
+func (e *Engine) closeEvents() {
+	e.eventsMu.Lock()
+	if !e.eventsClosed {
+		e.eventsClosed = true
+		close(e.events)
+	}
+	e.eventsMu.Unlock()
+}
+
 // Metrics exposes live statistics.
 func (e *Engine) Metrics() *Metrics { return &e.metrics }
 
@@ -224,8 +263,8 @@ func (e *Engine) Paused() bool { return e.gate.Paused() }
 // cancelled. It blocks; the returned error (if any) comes from the
 // target reader, not from individual target failures.
 func (e *Engine) Run(ctx context.Context, reader *input.TargetReader) error {
-	defer close(e.events)
-	e.metrics.Start = time.Now()
+	defer e.closeEvents()
+	e.metrics.MarkStart(time.Now())
 
 	var probeWG, authWG sync.WaitGroup
 
@@ -243,6 +282,27 @@ func (e *Engine) Run(ctx context.Context, reader *input.TargetReader) error {
 			e.probeWorker(ctx)
 		}()
 	}
+
+	// N2: wake the closer when the run is cancelled. jobsCond is
+	// otherwise broadcast only when liveJobs reaches zero, so a
+	// worker wedged inside a client call (the classic case: a
+	// non-RDP service that answers the probe but never completes the
+	// handshake) would park the closer forever — the ctx check in
+	// the closer loop is only evaluated on loop entry, never while
+	// blocked in Wait. The watcher also exits when Run returns, so a
+	// run that finishes without ever being cancelled leaks nothing.
+	watchDone := make(chan struct{})
+	defer close(watchDone)
+	go func() {
+		select {
+		case <-ctx.Done():
+			e.mu.Lock()
+			e.jobsCond.Broadcast()
+			e.mu.Unlock()
+		case <-watchDone:
+		}
+	}()
+
 	// Close the auth stage once probing has ended and no job can
 	// still resume. Closing earlier would drop re-queued jobs;
 	// waiting on ctx here keeps shutdown bounded when the run is
@@ -258,8 +318,28 @@ func (e *Engine) Run(ctx context.Context, reader *input.TargetReader) error {
 	}()
 
 	feedErr := e.feedTargets(ctx, reader)
-	authWG.Wait()
-	probeWG.Wait()
+
+	// N2: wait for the workers off the main path. A client that
+	// blocks inside Probe or Authenticate and ignores ctx must not
+	// be able to hold the run — and therefore the process — open
+	// forever: after cancellation the run unwinds once the grace
+	// period expires, leaving the wedged call behind.
+	workersDone := make(chan struct{})
+	go func() {
+		authWG.Wait()
+		probeWG.Wait()
+		close(workersDone)
+	}()
+
+	select {
+	case <-workersDone:
+	case <-ctx.Done():
+		select {
+		case <-workersDone:
+		case <-time.After(cancelGrace):
+			e.log.Warn("workers did not unwind after cancellation; abandoning in-flight attempts")
+		}
+	}
 
 	// A cancelled run reports cancellation even if the target stream
 	// itself drained cleanly.

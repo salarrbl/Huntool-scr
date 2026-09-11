@@ -23,6 +23,7 @@ func RenderSummary(s Summary, color bool) string {
 		{"Failed auth", fmt.Sprintf("%d", s.Failed)},
 		{"Auth errors", fmt.Sprintf("%d", s.AuthError+s.AuthTimeout)},
 		{"Cancelled", fmt.Sprintf("%d", s.Cancelled)},
+		{"Dropped events", fmt.Sprintf("%d", s.Dropped)},
 		{"Duration", s.Duration.Round(time.Second).String()},
 	}
 

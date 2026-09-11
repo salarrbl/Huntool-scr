@@ -22,19 +22,22 @@ const Redacted = "[REDACTED]"
 // Summary is the final per-run statistic block, filled by the app
 // from engine metrics.
 type Summary struct {
-	Targets        int64
-	Open           int64
-	Closed         int64
-	Timeout        int64
-	ProbeError     int64
-	SkippedAuth    int64
-	Attempts       int64
-	Success        int64
-	Failed         int64
-	AuthTimeout    int64
-	AuthError      int64
-	Cancelled      int64
-	LimitReached   int64
+	Targets      int64
+	Open         int64
+	Closed       int64
+	Timeout      int64
+	ProbeError   int64
+	SkippedAuth  int64
+	Attempts     int64
+	Success      int64
+	Failed       int64
+	AuthTimeout  int64
+	AuthError    int64
+	Cancelled    int64
+	LimitReached int64
+	// Dropped counts events that never reached the reports or the
+	// TUI because the run was cancelled or had already unwound (N7).
+	Dropped        int64
 	RateNotices    int64
 	Users          int
 	Passwords      int

@@ -81,3 +81,48 @@ func TestAuthWorkerReleasesJobOnEnqueueFailure(t *testing.T) {
 		t.Fatalf("liveJobs = %d, want 0 after abandoned job", live)
 	}
 }
+
+// TestEmitCountsDrops is the N7 regression test: an event that cannot
+// reach the stream — because the run was cancelled or because Run had
+// already closed the stream — must be accounted for rather than
+// vanishing without a trace.
+func TestEmitCountsDrops(t *testing.T) {
+	e := New(&mockClient{
+		auth: func(ctx context.Context, tgt rdp.Target, user, pass string) rdp.AuthResult {
+			return rdp.AuthResult{Status: rdp.StatusAuthFailure}
+		},
+	}, fastPolicy(3, 1), []string{"a"}, 1, func(int) string { return "x" }, testLogger())
+
+	// A delivered event is not a drop (the stream is buffered).
+	e.emit(context.Background(), rdp.StatusInfo, "h:1", "", "delivered", 0)
+	if got := e.Metrics().Dropped.Load(); got != 0 {
+		t.Fatalf("Dropped after a delivered event = %d, want 0", got)
+	}
+
+	// Fill the buffer with nobody reading, so a further send can only
+	// block. Until then the drop is not deterministic: a cancelled
+	// emit still delivers whenever the buffer has room.
+	for i := 0; i < eventBuffer-1; i++ {
+		e.emit(context.Background(), rdp.StatusInfo, "h:1", "", "fill", 0)
+	}
+	if got := e.Metrics().Dropped.Load(); got != 0 {
+		t.Fatalf("Dropped while filling the buffer = %d, want 0", got)
+	}
+
+	// A cancelled run drops instead of blocking the worker.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	e.emit(ctx, rdp.StatusInfo, "h:1", "", "cancelled", 0)
+	if got := e.Metrics().Dropped.Load(); got != 1 {
+		t.Fatalf("Dropped after a cancelled emit = %d, want 1", got)
+	}
+
+	// A late emit from a worker that outlived Run must not panic, and
+	// must be counted. closeEvents is idempotent.
+	e.closeEvents()
+	e.emit(context.Background(), rdp.StatusInfo, "h:1", "", "late", 0)
+	e.closeEvents()
+	if got := e.Metrics().Dropped.Load(); got != 2 {
+		t.Fatalf("Dropped after an emit on a closed stream = %d, want 2", got)
+	}
+}
