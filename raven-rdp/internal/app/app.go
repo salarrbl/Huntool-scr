@@ -303,13 +303,27 @@ func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.T
 	select {
 	case runErr = <-runErrCh:
 	case <-time.After(5 * time.Second):
+		// N4: say so. Leaving runErr nil here used to fall through to
+		// the success branch in silence, which is exactly the case an
+		// operator needs to hear about. The exit code is unchanged:
+		// the process is leaving either way.
+		a.log.Warn("engine did not unwind within 5s; exiting without summary")
 	}
 
 	if model.Forced() {
 		return 130
 	}
-	if errors.Is(runErr, context.Canceled) {
+	// N3: 130 is reserved for an interrupted run. A quit issued from
+	// inside the TUI cancels the context just the same but goes
+	// through the graceful path, so it must not be
+	// indistinguishable from Ctrl+C for callers reading the exit
+	// code.
+	if model.StoppedBySignal() {
 		return 130
+	}
+	if errors.Is(runErr, context.Canceled) {
+		// User quit from the TUI: graceful stop, exit success.
+		return 0
 	}
 	if runErr != nil {
 		a.log.Error("run finished with error", "error", runErr)

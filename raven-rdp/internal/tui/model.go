@@ -63,6 +63,12 @@ type Model struct {
 	scroll     int
 	autoScroll bool
 	forced     bool
+
+	// N3: viaSignal records whether the stop was initiated by a
+	// signal (Ctrl+C / SIGTERM) rather than by the in-TUI quit key.
+	// Both paths cancel the run context, so this is the only way to
+	// tell them apart when choosing an exit code.
+	viaSignal bool
 }
 
 // New builds the TUI model. cancel stops the engine (graceful stop).
@@ -106,6 +112,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case SIGINTMsg:
+		// N3: mark the stop as signal-driven before delegating, so
+		// the exit code can distinguish Ctrl+C from an in-TUI quit.
+		m.viaSignal = true
 		return m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlC})
 
 	case tickMsg:
@@ -131,6 +140,10 @@ func (m *Model) push(ev engine.Event) {
 
 // Forced reports whether the user force-quit (second Ctrl+C).
 func (m *Model) Forced() bool { return m.forced }
+
+// StoppedBySignal reports whether the stop came from a signal
+// (Ctrl+C / SIGTERM) rather than an in-TUI quit key.
+func (m *Model) StoppedBySignal() bool { return m.viaSignal }
 
 // Stop issues the graceful stop sequence (first Ctrl+C / q):
 // cancel scheduling, drain in-flight work, then show the summary.
