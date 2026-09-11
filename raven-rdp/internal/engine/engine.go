@@ -37,7 +37,10 @@ type Event struct {
 // Metrics holds race-free run statistics. All counters are atomic and
 // may be read at any time.
 type Metrics struct {
-	Start time.Time
+	// N1: the start time is written by Engine.Run and read from the
+	// TUI goroutine on every tick, so it must be atomic; a plain
+	// time.Time field is a data race.
+	start atomic.Pointer[time.Time]
 
 	Targets     atomic.Int64 // accepted targets fed to the engine
 	Completed   atomic.Int64 // targets whose lifecycle is finished
@@ -57,12 +60,18 @@ type Metrics struct {
 	LimitReached atomic.Int64
 }
 
-// Elapsed returns wall time since the run started.
+// MarkStart records the moment the run began. It is safe to call
+// concurrently with the readers below.
+func (m *Metrics) MarkStart(t time.Time) { m.start.Store(&t) }
+
+// Elapsed returns wall time since the run started. It returns 0
+// before the run has been started.
 func (m *Metrics) Elapsed() time.Duration {
-	if m.Start.IsZero() {
+	p := m.start.Load()
+	if p == nil {
 		return 0
 	}
-	return time.Since(m.Start)
+	return time.Since(*p)
 }
 
 // AttemptsPerSec returns the average attempt rate. It returns 0 only
@@ -225,7 +234,7 @@ func (e *Engine) Paused() bool { return e.gate.Paused() }
 // target reader, not from individual target failures.
 func (e *Engine) Run(ctx context.Context, reader *input.TargetReader) error {
 	defer close(e.events)
-	e.metrics.Start = time.Now()
+	e.metrics.MarkStart(time.Now())
 
 	var probeWG, authWG sync.WaitGroup
 
