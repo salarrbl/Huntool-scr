@@ -206,6 +206,14 @@ func (e *Engine) emit(ctx context.Context, status rdp.Status, target, username, 
 		Time: time.Now(), Target: target, Status: status, Username: username,
 		Message: message, Duration: duration,
 	}
+	// N2: the read lock keeps the send and the stream close apart, so
+	// a worker outliving Run (wedged inside a client call) cannot
+	// panic on a closed channel.
+	e.eventsMu.RLock()
+	defer e.eventsMu.RUnlock()
+	if e.eventsClosed {
+		return
+	}
 	select {
 	case e.events <- ev:
 	case <-ctx.Done():
