@@ -84,15 +84,29 @@ func TestValidateNumericBounds(t *testing.T) {
 }
 
 func TestValidateReportsRequireOutput(t *testing.T) {
-	c := validConfig(t)
-	c.JSON = true
-	c.CSV = true
-	if err := c.Validate(); err == nil {
-		t.Fatal("--json --csv without --output must fail")
+	// M2: --json, --csv, or both, all require --output.
+	cases := []struct {
+		name string
+		json bool
+		csv  bool
+	}{
+		{"json only", true, false},
+		{"csv only", false, true},
+		{"json and csv", true, true},
 	}
-	c.Output = "/tmp/report"
-	if err := c.Validate(); err != nil {
-		t.Fatalf("valid config rejected: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := validConfig(t)
+			c.JSON = tc.json
+			c.CSV = tc.csv
+			if err := c.Validate(); err == nil {
+				t.Fatal("--json/--csv without --output must fail")
+			}
+			c.Output = filepath.Join(t.TempDir(), "report")
+			if err := c.Validate(); err != nil {
+				t.Fatalf("valid config rejected: %v", err)
+			}
+		})
 	}
 }
 

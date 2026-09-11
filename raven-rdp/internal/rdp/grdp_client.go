@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"syscall"
 	"time"
 
 	grdpclient "github.com/x90skysn3k/grdp/client"
@@ -141,7 +142,7 @@ func classifyAuthError(err error, ctx context.Context) (Status, string) {
 
 // isRefused reports whether a network error is a connection refusal.
 func isRefused(err error) bool {
-	return strings.Contains(strings.ToLower(err.Error()), "connection refused")
+	return errors.Is(err, syscall.ECONNREFUSED)
 }
 
 // sanitizeError returns a short, credential-safe error summary.

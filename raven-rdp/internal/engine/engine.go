@@ -277,8 +277,8 @@ func (e *Engine) feedTargets(ctx context.Context, reader *input.TargetReader) er
 				e.targetQueue.Close()
 				err := <-reader.Done
 				if err != nil {
-					e.log.Error("target stream failed", "error", err)
-					e.emit(rdp.StatusError, "", "", "target stream: "+err.Error(), 0)
+				e.log.Error("target stream failed", "error", err)
+				e.emit(ctx, rdp.StatusError, "", "", "target stream: "+err.Error(), 0)
 				}
 				return err
 			}
