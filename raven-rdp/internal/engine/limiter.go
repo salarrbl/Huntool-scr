@@ -56,8 +56,11 @@ func (r *RateLimiter) Wait(ctx context.Context) (time.Duration, error) {
 		timer := time.NewTimer(wait)
 		select {
 		case <-timer.C:
-			// Slot may have been taken by another waiter; re-check.
+			// The timer has already fired; Stop would be a no-op
+			// here, so the slot re-check below just loops.
 		case <-ctx.Done():
+			// Stop releases the timer only on the path where it has
+			// not fired yet.
 			timer.Stop()
 			return time.Since(start), ctx.Err()
 		}

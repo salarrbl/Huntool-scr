@@ -65,11 +65,12 @@ func (m *Metrics) Elapsed() time.Duration {
 	return time.Since(m.Start)
 }
 
-// AttemptsPerSec returns the average attempt rate, safely zero when
-// the run is younger than a second.
+// AttemptsPerSec returns the average attempt rate. It returns 0 only
+// for effectively zero elapsed time (the first moments of a run), so
+// a busy first second reports its real rate instead of a flat zero.
 func (m *Metrics) AttemptsPerSec() float64 {
 	elapsed := m.Elapsed().Seconds()
-	if elapsed < 1.0 {
+	if elapsed <= 0.1 {
 		return 0
 	}
 	return float64(m.Attempts.Load()) / elapsed
@@ -277,8 +278,8 @@ func (e *Engine) feedTargets(ctx context.Context, reader *input.TargetReader) er
 				e.targetQueue.Close()
 				err := <-reader.Done
 				if err != nil {
-				e.log.Error("target stream failed", "error", err)
-				e.emit(ctx, rdp.StatusError, "", "", "target stream: "+err.Error(), 0)
+					e.log.Error("target stream failed", "error", err)
+					e.emit(ctx, rdp.StatusError, "", "", "target stream: "+err.Error(), 0)
 				}
 				return err
 			}

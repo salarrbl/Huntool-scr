@@ -10,7 +10,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
 	"github.com/salarrbl/raven-rdp/internal/engine"
@@ -182,5 +181,3 @@ func formatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%02d:%02d", mn, s)
 }
-
-var _ = lipgloss.JoinHorizontal // reserved for layout composition

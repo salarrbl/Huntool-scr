@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
@@ -290,7 +291,20 @@ func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.T
 		a.log.Error("TUI exited", "error", err)
 	}
 
-	runErr := <-runErrCh
+	// L6: if the user quit before the engine finished (early quit),
+	// stop the run and give the engine and dispatcher a bounded
+	// moment to wind down so their goroutines do not leak. The runErr
+	// receive is non-blocking: a stuck in-flight operation must not
+	// hold the process open.
+	if ctx.Err() == nil {
+		cancel()
+	}
+	var runErr error
+	select {
+	case runErr = <-runErrCh:
+	case <-time.After(5 * time.Second):
+	}
+
 	if model.Forced() {
 		return 130
 	}
