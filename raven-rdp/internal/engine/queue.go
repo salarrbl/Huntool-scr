@@ -3,16 +3,15 @@ package engine
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 )
 
 // Queue is a bounded, context-aware FIFO. Producers block when the
 // queue is full (and can be cancelled); consumers block until an item
 // arrives or the queue is closed and drained.
 type Queue[T any] struct {
+	mu     sync.RWMutex
 	ch     chan T
-	closed atomic.Bool
-	once   sync.Once
+	closed bool
 }
 
 // NewQueue creates a bounded queue with the given buffer size.
@@ -24,11 +23,15 @@ func NewQueue[T any](buffer int) *Queue[T] {
 }
 
 // Enqueue blocks until v is accepted or ctx is done / the queue is
-// closed.
+// closed. The read lock is held for the duration of the send so Close
+// can never close the channel while a send is in flight.
 func (q *Queue[T]) Enqueue(ctx context.Context, v T) bool {
-	if q.closed.Load() {
+	q.mu.RLock()
+	if q.closed {
+		q.mu.RUnlock()
 		return false
 	}
+	defer q.mu.RUnlock()
 	select {
 	case q.ch <- v:
 		return true
@@ -55,12 +58,16 @@ func (q *Queue[T]) Dequeue(ctx context.Context) (T, bool) {
 }
 
 // Close closes the queue; future Enqueues fail and Dequeues return
-// once the queue drains.
+// once the queue drains. Close waits for any in-flight Enqueue to
+// complete before closing the channel, so a send can never panic on a
+// closed channel.
 func (q *Queue[T]) Close() {
-	q.once.Do(func() {
-		q.closed.Store(true)
+	q.mu.Lock()
+	if !q.closed {
+		q.closed = true
 		close(q.ch)
-	})
+	}
+	q.mu.Unlock()
 }
 
 // Len reports the number of queued items.

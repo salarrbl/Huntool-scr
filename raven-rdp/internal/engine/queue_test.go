@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
@@ -109,5 +110,32 @@ func TestQueueLen(t *testing.T) {
 	q.Enqueue(ctx, 2)
 	if q.Len() != 2 {
 		t.Fatalf("Len = %d, want 2", q.Len())
+	}
+}
+
+// TestQueueCloseEnqueueRace is a regression test for the data race
+// that let Close close the channel while an Enqueue send was in
+// flight, panicking with "send on closed channel".
+func TestQueueCloseEnqueueRace(t *testing.T) {
+	ctx := context.Background()
+	for i := 0; i < 1000; i++ {
+		q := NewQueue[int](1)
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			q.Enqueue(ctx, 1)
+		}()
+		go func() {
+			defer wg.Done()
+			q.Close()
+		}()
+		wg.Wait()
+		// Drain so the next iteration starts from a clean state.
+		for {
+			if _, ok := q.Dequeue(ctx); !ok {
+				break
+			}
+		}
 	}
 }

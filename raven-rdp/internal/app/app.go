@@ -262,13 +262,20 @@ func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.T
 	done := make(chan error, 1)
 	go func() { done <- eng.Run(ctx, reader) }()
 
-	// Drain the event stream (and the report writers) only after the
-	// run has finished, then deliver the terminal TUI message.
+	// C1: the dispatcher must be running while the engine runs. It is
+	// the only consumer of the engine's bounded event stream, so
+	// starting it after `<-done` would deadlock: the engine blocks
+	// writing to a full event channel and never reaches done.
+	finished := a.dispatch(eng.Events(), nil, jw, cw, func(ev engine.Event) {
+		prog.Send(tui.EventMsg{Ev: ev})
+	})
+
+	// C2: deliver the terminal TUI message only after the engine has
+	// finished AND the dispatcher has drained the event stream and
+	// flushed the report writers.
 	go func() {
 		runErr := <-done
-		a.dispatch(eng.Events(), nil, jw, cw, func(ev engine.Event) {
-			prog.Send(tui.EventMsg{Ev: ev})
-		})
+		<-finished
 		prog.Send(tui.EngineDoneMsg{Err: runErr})
 	}()
 
