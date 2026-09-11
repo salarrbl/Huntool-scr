@@ -46,5 +46,20 @@ func (g *Guard) Reserve() bool {
 // successful authentication).
 func (g *Guard) Finish() { g.terminal.Store(true) }
 
+// Release returns one previously reserved attempt slot (for example
+// when an attempt is aborted before it starts). The counter never
+// drops below zero.
+func (g *Guard) Release() {
+	for {
+		cur := g.attempts.Load()
+		if cur <= 0 {
+			return
+		}
+		if g.attempts.CompareAndSwap(cur, cur-1) {
+			return
+		}
+	}
+}
+
 // Done reports whether the target is terminal.
 func (g *Guard) Done() bool { return g.terminal.Load() }

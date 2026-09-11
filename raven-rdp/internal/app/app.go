@@ -260,7 +260,14 @@ func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.T
 	}()
 
 	done := make(chan error, 1)
-	go func() { done <- eng.Run(ctx, reader) }()
+	// H1: carry the engine's result back to this function so the exit
+	// code reflects the run outcome, not just the TUI quit path.
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErr := eng.Run(ctx, reader)
+		done <- runErr
+		runErrCh <- runErr
+	}()
 
 	// C1: the dispatcher must be running while the engine runs. It is
 	// the only consumer of the engine's bounded event stream, so
@@ -283,8 +290,16 @@ func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.T
 		a.log.Error("TUI exited", "error", err)
 	}
 
+	runErr := <-runErrCh
 	if model.Forced() {
 		return 130
+	}
+	if errors.Is(runErr, context.Canceled) {
+		return 130
+	}
+	if runErr != nil {
+		a.log.Error("run finished with error", "error", runErr)
+		return 1
 	}
 	if !cfg.Quiet && cfg.Output != "" {
 		fmt.Fprintf(os.Stderr, "reports written to %s\n", cfg.Output)

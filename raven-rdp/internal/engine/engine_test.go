@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -422,4 +423,33 @@ func TestEngineNoPasswordInEvents(t *testing.T) {
 			t.Fatalf("event leaks password material: %+v", ev)
 		}
 	}
+}
+
+// TestEngineNoGoroutineLeaks is the harness-level leak sanity check:
+// after Run returns, the goroutine count must settle back to the
+// baseline within 500ms (worker, closer and reader goroutines all
+// exit).
+func TestEngineNoGoroutineLeaks(t *testing.T) {
+	tc := &mockClient{
+		probes: func(t rdp.Target) rdp.ProbeResult {
+			return rdp.ProbeResult{Status: rdp.StatusOpen, NLA: rdp.NLARequired, Error: "NLA enforced"}
+		},
+		auth: func(ctx context.Context, t rdp.Target, user, pass string) rdp.AuthResult {
+			return rdp.AuthResult{Status: rdp.StatusAuthFailure, Error: "invalid credentials"}
+		},
+	}
+
+	baseline := runtime.NumGoroutine()
+	for i := 0; i < 5; i++ {
+		runEngine(t, tc, fastPolicy(3, 2), []string{"10.1.1.1"})
+	}
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if runtime.NumGoroutine() <= baseline {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("goroutines did not settle: baseline %d, now %d", baseline, runtime.NumGoroutine())
 }

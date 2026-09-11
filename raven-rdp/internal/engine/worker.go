@@ -65,6 +65,23 @@ func (e *Engine) recordProbe(ctx context.Context, t rdp.Target, res rdp.ProbeRes
 	}
 }
 
+// jobOutcome reports what authWorker must do with a job after one
+// runJob pass.
+type jobOutcome int
+
+// runJob outcomes.
+const (
+	// jobTerminal: the job can never make another attempt; its live
+	// slot was already released inside runJob.
+	jobTerminal jobOutcome = iota
+	// jobRequeue: an attempt happened and the job may still have
+	// work left; it must be re-queued.
+	jobRequeue
+	// jobAborted: the attempt never started (cancelled); the job is
+	// dropped and its live slot must be released by the caller.
+	jobAborted
+)
+
 // authWorker consumes auth jobs. Each pass performs at most one
 // attempt and then re-queues the job if work remains, so a
 // rate-limited target never pins a worker while other targets could
@@ -75,37 +92,46 @@ func (e *Engine) authWorker(ctx context.Context) {
 		if !ok {
 			return
 		}
-		if e.runJob(ctx, job) {
+		switch e.runJob(ctx, job) {
+		case jobTerminal:
 			e.metrics.Completed.Add(1)
 			continue
-		}
-		// runJob returns false only when ctx is done and the job was
-		// already accounted as finished, so it must never be re-queued.
-		if ctx.Err() != nil {
-			return
-		}
-		if !e.authQueue.Enqueue(ctx, job) {
+		case jobRequeue:
+			if !e.authQueue.Enqueue(ctx, job) {
+				// H3: the queue is closed (run cancelled or the auth
+				// stage shut down): the job can never resume, so
+				// release its live slot instead of abandoning it and
+				// blocking the closer forever.
+				e.trackJobEnd()
+				return
+			}
+			continue
+		case jobAborted:
+			e.trackJobEnd()
 			return
 		}
 	}
 }
 
 // runJob performs one authentication attempt for the job (or reports
-// why no more are possible). It reports whether the job is terminal.
-func (e *Engine) runJob(ctx context.Context, job *Job) bool {
+// why no more are possible). It returns the jobOutcome the caller
+// must act on.
+func (e *Engine) runJob(ctx context.Context, job *Job) jobOutcome {
 	user, pass, ok := job.NextCredential(e.users, e.passCount, e.passwordAt)
 	if !ok {
 		e.finishJob(job)
 		e.trackJobEnd()
-		return true
+		return jobTerminal
 	}
 
 	waited, err := job.Limiter.Wait(ctx)
 	if err != nil {
+		// H2: the reserved attempt slot is never used; give it back
+		// so cancellation does not silently burn the attempt limit.
+		job.Guard.Release()
 		e.metrics.Cancelled.Add(1)
 		e.emit(rdp.StatusCancelled, job.Target.String(), user, "rate wait cancelled", 0)
-		e.trackJobEnd()
-		return false
+		return jobAborted
 	}
 	if waited >= job.Limiter.NoticeThreshold() {
 		e.metrics.RateNotices.Add(1)
@@ -113,10 +139,10 @@ func (e *Engine) runJob(ctx context.Context, job *Job) bool {
 	}
 
 	if err := e.gate.Wait(ctx); err != nil {
+		job.Guard.Release()
 		e.metrics.Cancelled.Add(1)
 		e.emit(rdp.StatusCancelled, job.Target.String(), user, "stopped while paused", 0)
-		e.trackJobEnd()
-		return false
+		return jobAborted
 	}
 
 	e.metrics.Attempts.Add(1)
@@ -124,9 +150,9 @@ func (e *Engine) runJob(ctx context.Context, job *Job) bool {
 	e.recordAuth(job, res)
 	if job.Guard.Done() {
 		e.trackJobEnd()
-		return true
+		return jobTerminal
 	}
-	return false
+	return jobRequeue
 }
 
 func (e *Engine) recordAuth(job *Job, res rdp.AuthResult) {
