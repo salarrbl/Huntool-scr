@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -143,7 +144,11 @@ func TestClassifyProbeError(t *testing.T) {
 	}{
 		{"cancelled ctx", errors.New("x"), ctx, StatusCancelled},
 		{"timeout", &timeoutErr{}, context.Background(), StatusTimeout},
-		{"refused", &net.OpError{Op: "dial", Err: errors.New("connection refused")}, context.Background(), StatusClosed},
+		// M5: refusal detection is now errors.Is(err, syscall.ECONNREFUSED),
+		// so the case carries a real refused syscall error; a generic
+		// "connection refused" string still lands in StatusClosed via
+		// the fallback (see the generic case below).
+		{"refused", &net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}, context.Background(), StatusClosed},
 		{"generic", errors.New("boom"), context.Background(), StatusClosed},
 	}
 	for _, tc := range cases {

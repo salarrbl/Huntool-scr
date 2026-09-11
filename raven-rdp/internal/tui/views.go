@@ -100,10 +100,20 @@ func (m *Model) renderStats(w int) string {
 	}
 
 	var b strings.Builder
-	for i := 0; i < len(left); i++ {
-		b.WriteString(m.st.key.Render(padRight(left[i].k, kw)) + "  " + m.st.value.Render(padRight(left[i].v, vw)))
+	// L5: iterate over the longer column and pad the shorter one, so
+	// right[i] is never indexed beyond its length.
+	rows := max(len(left), len(right))
+	for i := 0; i < rows; i++ {
+		var lc, rc cell
+		if i < len(left) {
+			lc = left[i]
+		}
+		if i < len(right) {
+			rc = right[i]
+		}
+		b.WriteString(m.st.key.Render(padRight(lc.k, kw)) + "  " + m.st.value.Render(padRight(lc.v, vw)))
 		b.WriteString(strings.Repeat(" ", gap))
-		b.WriteString(m.st.key.Render(padRight(right[i].k, kw)) + "  " + m.st.value.Render(padRight(right[i].v, vw)))
+		b.WriteString(m.st.key.Render(padRight(rc.k, kw)) + "  " + m.st.value.Render(padRight(rc.v, vw)))
 		b.WriteString("\n")
 	}
 	return b.String()

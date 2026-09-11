@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
@@ -260,15 +261,29 @@ func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.T
 	}()
 
 	done := make(chan error, 1)
-	go func() { done <- eng.Run(ctx, reader) }()
+	// H1: carry the engine's result back to this function so the exit
+	// code reflects the run outcome, not just the TUI quit path.
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErr := eng.Run(ctx, reader)
+		done <- runErr
+		runErrCh <- runErr
+	}()
 
-	// Drain the event stream (and the report writers) only after the
-	// run has finished, then deliver the terminal TUI message.
+	// C1: the dispatcher must be running while the engine runs. It is
+	// the only consumer of the engine's bounded event stream, so
+	// starting it after `<-done` would deadlock: the engine blocks
+	// writing to a full event channel and never reaches done.
+	finished := a.dispatch(eng.Events(), nil, jw, cw, func(ev engine.Event) {
+		prog.Send(tui.EventMsg{Ev: ev})
+	})
+
+	// C2: deliver the terminal TUI message only after the engine has
+	// finished AND the dispatcher has drained the event stream and
+	// flushed the report writers.
 	go func() {
 		runErr := <-done
-		a.dispatch(eng.Events(), nil, jw, cw, func(ev engine.Event) {
-			prog.Send(tui.EventMsg{Ev: ev})
-		})
+		<-finished
 		prog.Send(tui.EngineDoneMsg{Err: runErr})
 	}()
 
@@ -276,8 +291,29 @@ func (a *App) runTUI(parent context.Context, eng *engine.Engine, reader *input.T
 		a.log.Error("TUI exited", "error", err)
 	}
 
+	// L6: if the user quit before the engine finished (early quit),
+	// stop the run and give the engine and dispatcher a bounded
+	// moment to wind down so their goroutines do not leak. The runErr
+	// receive is non-blocking: a stuck in-flight operation must not
+	// hold the process open.
+	if ctx.Err() == nil {
+		cancel()
+	}
+	var runErr error
+	select {
+	case runErr = <-runErrCh:
+	case <-time.After(5 * time.Second):
+	}
+
 	if model.Forced() {
 		return 130
+	}
+	if errors.Is(runErr, context.Canceled) {
+		return 130
+	}
+	if runErr != nil {
+		a.log.Error("run finished with error", "error", runErr)
+		return 1
 	}
 	if !cfg.Quiet && cfg.Output != "" {
 		fmt.Fprintf(os.Stderr, "reports written to %s\n", cfg.Output)

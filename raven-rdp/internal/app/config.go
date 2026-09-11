@@ -87,8 +87,10 @@ func (c Config) Validate() error {
 	if c.TargetRate <= 0 {
 		return fmt.Errorf("--target-rate must be a positive attempts-per-minute (got %d)", c.TargetRate)
 	}
-	if c.JSON && c.CSV && c.Output == "" {
-		return fmt.Errorf("--output is required when writing reports")
+	// M2: any report format flag needs a place to write the report;
+	// previously --json/--csv were silently ignored without --output.
+	if (c.JSON || c.CSV) && c.Output == "" {
+		return fmt.Errorf("--output is required when --json or --csv is set")
 	}
 	return nil
 }

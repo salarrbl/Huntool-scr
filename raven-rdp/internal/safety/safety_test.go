@@ -85,6 +85,32 @@ func TestGuardFinish(t *testing.T) {
 	}
 }
 
+func TestGuardRelease(t *testing.T) {
+	g := NewGuard(3)
+	if !g.Reserve() {
+		t.Fatal("reserve failed")
+	}
+	g.Release()
+	if g.Count() != 0 {
+		t.Fatalf("Count = %d, want 0 after Release", g.Count())
+	}
+	// The released slot can be claimed again.
+	if !g.Reserve() || !g.Reserve() || !g.Reserve() {
+		t.Fatal("slots up to the limit must stay reservable")
+	}
+	g.Release()
+	if g.Count() != 2 {
+		t.Fatalf("Count = %d, want 2 after releasing one of three", g.Count())
+	}
+	// Release must never take the counter below zero.
+	for i := 0; i < 5; i++ {
+		g.Release()
+	}
+	if g.Count() != 0 {
+		t.Fatalf("Count = %d, want 0 (floor at zero)", g.Count())
+	}
+}
+
 func TestGuardConcurrent(t *testing.T) {
 	const limit = 100
 	const goroutines = 16
