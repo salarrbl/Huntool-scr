@@ -116,6 +116,19 @@ func (m *Model) renderStats(w int) string {
 		b.WriteString(m.st.key.Render(padRight(rc.k, kw)) + "  " + m.st.value.Render(padRight(rc.v, vw)))
 		b.WriteString("\n")
 	}
+	b.WriteString("\n")
+
+	// Current operation indicator
+	currentUser := met.CurrentUsername.Load()
+	if currentUser != nil {
+		username := *currentUser
+		passIdx := met.CurrentPasswordIndex.Load()
+		totalPasses := m.eng.PasswordCount()
+		if len(username) <= 60 {
+			fmt.Fprintf(&b, "Current: %s | pass %d/%d\n", username, passIdx, totalPasses)
+		}
+	}
+
 	return b.String()
 }
 

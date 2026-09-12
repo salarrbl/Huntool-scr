@@ -1,3 +1,0 @@
-# sample usernames
-administrator
-testuser
