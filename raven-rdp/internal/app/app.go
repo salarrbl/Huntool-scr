@@ -166,16 +166,16 @@ func (a *App) dispatch(events <-chan engine.Event, console *output.Console, jw *
 		}()
 
 		for ev := range events {
-			if jw != nil {
-				if err := jw.Event(ev.Time, ev.Target, ev.Status.String(), ev.Username, ev.Duration, ev.Message); err != nil {
-					a.log.Error("JSON write failed", "error", err)
+				if jw != nil {
+					if err := jw.Event(ev.Time, ev.Target, ev.Status.String(), ev.Username, ev.Password, ev.Duration, ev.Message); err != nil {
+						a.log.Error("JSON write failed", "error", err)
+					}
 				}
-			}
-			if cw != nil {
-				if err := cw.Event(ev.Time, ev.Target, ev.Status.String(), ev.Username, ev.Duration, ev.Message); err != nil {
-					a.log.Error("CSV write failed", "error", err)
+				if cw != nil {
+					if err := cw.Event(ev.Time, ev.Target, ev.Status.String(), ev.Username, ev.Password, ev.Duration, ev.Message); err != nil {
+						a.log.Error("CSV write failed", "error", err)
+					}
 				}
-			}
 			if console != nil {
 				if ev.Status == rdp.StatusAuthSuccess {
 					console.Success(ev.Time, ev.Target, ev.Username)

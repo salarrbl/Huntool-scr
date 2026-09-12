@@ -12,11 +12,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
+	"github.com/salarrbl/raven-rdp/internal/rdp"
 	"github.com/salarrbl/raven-rdp/internal/engine"
 )
 
 // historySize bounds the in-memory event feed (spec: 100 events).
-const historySize = 100
+const (
+	historySize     = 100
+	solvedSize      = 50 // Number of successful auths to keep in solved panel
+	currentEvents   = 100 // Events shown in current feed (popped up)
+	fadeDelay       = 5 * time.Second
+	unsolvedSize    = 75 // Number of recent unsolved events
+	currentEventsVel= 2   // Events popped every X seconds (reduce velocity)
+)
 
 // tickInterval drives elapsed-time and rate refresh.
 const tickInterval = 250 * time.Millisecond
@@ -58,8 +66,18 @@ type Model struct {
 	runErr  error
 	stopped bool
 
-	hist       [historySize]engine.Event
-	histCount  int
+	// Event history
+	current   [currentEvents]engine.Event
+	currentLen int
+	solved    [solvedSize]engine.Event
+	solvedLen  int
+	unsolved   [unsolvedSize]engine.Event
+	unsolvedLen int
+
+	// Fade out unsolved events
+	fadeTimer time.Time
+
+	// Navigation
 	scroll     int
 	autoScroll bool
 	forced     bool
@@ -80,8 +98,6 @@ func New(eng *engine.Engine, cancel context.CancelFunc) *Model {
 		st:         newStyles(color),
 		color:      color,
 		out:        os.Stdout,
-		width:      80,
-		height:     24,
 		start:      time.Now(),
 		autoScroll: true,
 	}
@@ -126,15 +142,52 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// push appends an event to the bounded ring buffer.
+// push appends an event to the bounded ring buffers.
 func (m *Model) push(ev engine.Event) {
-	m.hist[m.histCount%historySize] = ev
-	m.histCount++
+	switch ev.Status {
+	case rdp.StatusAuthSuccess:
+		// Add to solved panel at the front
+		if m.solvedLen < solvedSize {
+			m.solved[m.solvedLen] = ev
+			m.solvedLen++
+		} else {
+			// Shift left
+			for i := 0; i < solvedSize-1; i++ {
+				m.solved[i] = m.solved[i+1]
+			}
+			m.solved[solvedSize-1] = ev
+		}
+	case rdp.StatusAuthFailure, rdp.StatusTimeout, rdp.StatusClosed:
+		// Add unsolved panel at front
+		if m.unsolvedLen < unsolvedSize {
+			m.unsolved[m.unsolvedLen] = ev
+			m.unsolvedLen++
+		} else {
+			// Shift left
+			for i := 0; i < unsolvedSize-1; i++ {
+				m.unsolved[i] = m.unsolved[i+1]
+			}
+			m.unsolved[unsolvedSize-1] = ev
+		}
+	default:
+		// Admin / probe events go to current
+		if m.currentLen < currentEvents {
+			m.current[m.currentLen] = ev
+			m.currentLen++
+		} else {
+			// Shift left
+			for i := 0; i < currentEvents-1; i++ {
+				m.current[i] = m.current[i+1]
+			}
+			m.current[currentEvents-1] = ev
+		}
+	}
+
 	if m.autoScroll {
 		m.scroll = 0
 	}
-	if m.scroll > historySize {
-		m.scroll = historySize
+	if m.scroll > currentEvents {
+		m.scroll = currentEvents
 	}
 }
 
@@ -145,8 +198,7 @@ func (m *Model) Forced() bool { return m.forced }
 // (Ctrl+C / SIGTERM) rather than an in-TUI quit key.
 func (m *Model) StoppedBySignal() bool { return m.viaSignal }
 
-// Stop issues the graceful stop sequence (first Ctrl+C / q):
-// cancel scheduling, drain in-flight work, then show the summary.
+// Stop issues the graceful stop sequence (first Ctrl+C / q): cancel scheduling, drain in-flight work, then show the summary.
 func (m *Model) Stop() {
 	if m.stopped {
 		return
@@ -159,26 +211,27 @@ func (m *Model) Stop() {
 }
 
 // EventCount reports how many events were produced (untruncated).
-func (m *Model) EventCount() int { return m.histCount }
+func (m *Model) EventCount() int { return m.solvedLen + m.unsolvedLen + m.currentLen }
 
 // isTerminal reports whether f refers to a terminal device.
 func isTerminal(f *os.File) bool {
 	return term.IsTerminal(int(f.Fd()))
 }
 
-// visible returns the events currently in the feed, oldest first.
+// visible returns the current events oldest first.
 func (m *Model) visible() []engine.Event {
-	if m.histCount == 0 {
+	if m.currentLen == 0 {
 		return nil
 	}
-	n := m.histCount
-	if n > historySize {
-		n = historySize
+	n := m.currentLen
+	if n > currentEvents {
+		n = currentEvents
 	}
 	out := make([]engine.Event, 0, n)
-	start := m.histCount - n
+	start := m.currentLen - n
 	for i := 0; i < n; i++ {
-		out = append(out, m.hist[(start+i)%historySize])
+		ev := m.current[(start+i)%currentEvents]
+		out = append(out, ev)
 	}
 	return out
 }

@@ -8,12 +8,13 @@ import (
 	"time"
 )
 
-// JSONRow is one serialized audit result. It carries no password or
-// other secret by construction.
+// JSONRow is one serialized audit result. It carries the password
+// field only for successful authentication events.
 type JSONRow struct {
 	Target     string `json:"target"`
 	Status     string `json:"status"`
 	Username   string `json:"username,omitempty"`
+	Password   string `json:"password,omitempty"`
 	Timestamp  string `json:"timestamp"`
 	DurationMS int64  `json:"duration_ms"`
 	Error      string `json:"error,omitempty"`
@@ -45,11 +46,12 @@ func NewJSONWriter(path string) (*JSONWriter, error) {
 }
 
 // Event appends one result row.
-func (w *JSONWriter) Event(t time.Time, target, status, username string, duration time.Duration, errMsg string) error {
+func (w *JSONWriter) Event(t time.Time, target, status, username, password string, duration time.Duration, errMsg string) error {
 	row := JSONRow{
 		Target:     target,
 		Status:     status,
 		Username:   username,
+		Password:   password,
 		Timestamp:  t.UTC().Format(time.RFC3339),
 		DurationMS: duration.Milliseconds(),
 		Error:      errMsg,

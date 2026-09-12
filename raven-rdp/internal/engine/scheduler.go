@@ -51,12 +51,12 @@ func (j *Job) MarkSuccess() {
 }
 
 // NextCredential returns the next (username, password) pair in
-// user-major order, reserving an attempt slot. It returns ok=false
-// when the job is finished, the attempt limit is reached, or the
-// credential matrix is exhausted.
+// password-major order (orthogonal pairing), reserving an attempt slot.
+// It returns ok=false when the job is finished, the attempt limit is reached,
+// or the credential matrix is exhausted.
 //
-// passwordAt is the only channel through which passwords are passed;
-// jobs never store them.
+// passwordAt is the only channel through which passwords are passed; jobs
+// never store them.
 func (j *Job) NextCredential(users []string, passCount int, passwordAt func(int) string) (string, string, bool) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -73,15 +73,15 @@ func (j *Job) NextCredential(users []string, passCount int, passwordAt func(int)
 		return "", "", false
 	}
 
-	for j.userIdx < len(users) {
-		if j.passIdx < passCount {
+	for j.passIdx < passCount {
+		if j.userIdx < len(users) {
 			user := users[j.userIdx]
 			pass := passwordAt(j.passIdx)
-			j.passIdx++
+			j.userIdx++
 			return user, pass, true
 		}
-		j.userIdx++
-		j.passIdx = 0
+		j.userIdx = 0
+		j.passIdx++
 	}
 	j.finished = true
 	return "", "", false

@@ -3,7 +3,8 @@
 // shared status vocabulary used across the application.
 //
 // Secrets (passwords) are deliberately absent from every type in this
-// package. Results are safe to log, serialize and display.
+// package, except for successful authentication results where the password
+// may be included in file outputs.
 package rdp
 
 import (
@@ -128,11 +129,13 @@ type ProbeResult struct {
 
 // AuthResult reports the outcome of one authentication attempt.
 //
-// It intentionally carries no password or equivalent secret.
+// It intentionally carries no password or equivalent secret, except for
+// successful auth where the password may be included in file outputs.
 type AuthResult struct {
 	Target   Target
 	Username string
 	Status   Status
 	Duration time.Duration
 	Error    string
+	Password string // populated only for AUTH_SUCCESS
 }

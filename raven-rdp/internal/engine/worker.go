@@ -39,7 +39,7 @@ func (e *Engine) recordProbe(ctx context.Context, t rdp.Target, res rdp.ProbeRes
 
 	if res.Status != rdp.StatusOpen {
 		e.metrics.Completed.Add(1)
-		e.emit(ctx, res.Status, t.String(), "", res.Error, res.Duration)
+		e.emit(ctx, res.Status, t.String(), "", res.Error, "", res.Duration)
 		return
 	}
 
@@ -47,14 +47,14 @@ func (e *Engine) recordProbe(ctx context.Context, t rdp.Target, res rdp.ProbeRes
 	case rdp.NLANotEnforced:
 		e.metrics.SkippedAuth.Add(1)
 		e.metrics.Completed.Add(1)
-		e.emit(ctx, rdp.StatusInfo, t.String(), "", "NLA not enforced; credential check not applicable", res.Duration)
+		e.emit(ctx, rdp.StatusInfo, t.String(), "", "NLA not enforced; credential check not applicable", "", res.Duration)
 		return
 	default:
 		msg := res.Error
 		if msg == "" {
 			msg = "RDP service open"
 		}
-		e.emit(ctx, rdp.StatusOpen, t.String(), "", msg, res.Duration)
+		e.emit(ctx, rdp.StatusOpen, t.String(), "", msg, "", res.Duration)
 	}
 
 	job := NewJob(t, e.policy.AttemptLimit, e.policy.TargetRate)
@@ -131,23 +131,38 @@ func (e *Engine) runJob(ctx context.Context, job *Job) jobOutcome {
 		// so cancellation does not silently burn the attempt limit.
 		job.Guard.Release()
 		e.metrics.Cancelled.Add(1)
-		e.emit(ctx, rdp.StatusCancelled, job.Target.String(), user, "rate wait cancelled", 0)
+		e.metrics.CurrentUsername.Store(nil)
+		e.emit(ctx, rdp.StatusCancelled, job.Target.String(), user, "rate wait cancelled", "", 0)
 		return jobAborted
 	}
 	if waited >= job.Limiter.NoticeThreshold() {
 		e.metrics.RateNotices.Add(1)
-		e.emit(ctx, rdp.StatusRateLimited, job.Target.String(), user, "waiting for per-target rate slot", waited)
+		e.emit(ctx, rdp.StatusRateLimited, job.Target.String(), user, "waiting for per-target rate slot", "", waited)
 	}
 
 	if err := e.gate.Wait(ctx); err != nil {
 		job.Guard.Release()
 		e.metrics.Cancelled.Add(1)
-		e.emit(ctx, rdp.StatusCancelled, job.Target.String(), user, "stopped while paused", 0)
+		e.metrics.CurrentUsername.Store(nil)
+		e.metrics.CurrentPasswordIndex.Store(0)
+		e.emit(ctx, rdp.StatusCancelled, job.Target.String(), user, "stopped while paused", "", 0)
 		return jobAborted
 	}
 
 	e.metrics.Attempts.Add(1)
+	e.metrics.CurrentUsername.Store(&user)
+	e.metrics.CurrentPasswordIndex.Store(int64(job.passIdx))
+
+	// Guard against protocol violations from the grdp library (e.g., nil fastPathListener dereference)
 	res := e.client.Authenticate(ctx, job.Target, user, pass)
+	if r := recover(); r != nil {
+		// Catch unexpected grdp protocol panics; convert to clean error
+		res.Status = rdp.StatusError
+		res.Error = "malformed RDP response"
+		res.Password = "" // Never expose credentials in error
+	}
+
+	res.Password = pass // Store password for file outputs of successful logins
 	e.recordAuth(ctx, job, res)
 	if job.Guard.Done() {
 		e.trackJobEnd()
@@ -157,29 +172,34 @@ func (e *Engine) runJob(ctx context.Context, job *Job) jobOutcome {
 }
 
 func (e *Engine) recordAuth(ctx context.Context, job *Job, res rdp.AuthResult) {
+	password := ""
+	if res.Status == rdp.StatusAuthSuccess {
+		password = res.Password
+	}
+
 	switch res.Status {
 	case rdp.StatusAuthSuccess:
 		e.metrics.Success.Add(1)
 		e.log.Info("credential verified", "target", res.Target.String(), "username", res.Username)
-		e.emit(ctx, rdp.StatusAuthSuccess, res.Target.String(), res.Username, "Password: [REDACTED]", res.Duration)
+		e.emit(ctx, rdp.StatusAuthSuccess, res.Target.String(), res.Username, "Password: [REDACTED]", password, res.Duration)
 		job.MarkSuccess()
 		job.Guard.Finish()
 	case rdp.StatusAuthFailure:
 		e.metrics.Failed.Add(1)
-		e.emit(ctx, rdp.StatusAuthFailure, res.Target.String(), res.Username, res.Error, res.Duration)
+		e.emit(ctx, rdp.StatusAuthFailure, res.Target.String(), res.Username, res.Error, "", res.Duration)
 	case rdp.StatusTimeout:
 		e.metrics.AuthTimeout.Add(1)
-		e.emit(ctx, rdp.StatusTimeout, res.Target.String(), res.Username, res.Error, res.Duration)
+		e.emit(ctx, rdp.StatusTimeout, res.Target.String(), res.Username, res.Error, "", res.Duration)
 	case rdp.StatusClosed:
 		e.metrics.Failed.Add(1)
-		e.emit(ctx, rdp.StatusClosed, res.Target.String(), res.Username, res.Error, res.Duration)
+		e.emit(ctx, rdp.StatusClosed, res.Target.String(), res.Username, res.Error, "", res.Duration)
 		job.Guard.Finish() // connection lost: stop hammering a dead endpoint
 	case rdp.StatusCancelled:
 		e.metrics.Cancelled.Add(1)
-		e.emit(ctx, rdp.StatusCancelled, res.Target.String(), res.Username, res.Error, res.Duration)
+		e.emit(ctx, rdp.StatusCancelled, res.Target.String(), res.Username, res.Error, "", res.Duration)
 	default:
 		e.metrics.AuthError.Add(1)
-		e.emit(ctx, rdp.StatusError, res.Target.String(), res.Username, res.Error, res.Duration)
+		e.emit(ctx, rdp.StatusError, res.Target.String(), res.Username, res.Error, "", res.Duration)
 	}
 }
 
@@ -191,10 +211,10 @@ func (e *Engine) finishJob(ctx context.Context, job *Job) {
 	}
 	if job.Guard.Count() >= int64(job.Guard.Limit()) {
 		e.metrics.LimitReached.Add(1)
-		e.emit(ctx, rdp.StatusAttemptLimit, job.Target.String(), "", "attempt limit reached", 0)
+		e.emit(ctx, rdp.StatusAttemptLimit, job.Target.String(), "", "attempt limit reached", "", 0)
 		return
 	}
-	e.emit(ctx, rdp.StatusInfo, job.Target.String(), "", "credential list exhausted", 0)
+	e.emit(ctx, rdp.StatusInfo, job.Target.String(), "", "credential list exhausted", "", 0)
 }
 
 // emit appends an event to the stream. It blocks only while the event
@@ -202,10 +222,15 @@ func (e *Engine) finishJob(ctx context.Context, job *Job) {
 // to workers instead of dropping results. When the run context is
 // done, the event is dropped rather than blocking a worker forever;
 // every drop is counted in Metrics.Dropped.
-func (e *Engine) emit(ctx context.Context, status rdp.Status, target, username, message string, duration time.Duration) {
+func (e *Engine) emit(ctx context.Context, status rdp.Status, target, username, message, password string, duration time.Duration) {
 	ev := Event{
-		Time: time.Now(), Target: target, Status: status, Username: username,
-		Message: message, Duration: duration,
+		Time:     time.Now(),
+		Target:   target,
+		Status:   status,
+		Username: username,
+		Message:  message,
+		Duration: duration,
+		Password: password,
 	}
 	// N2: the read lock keeps the send and the stream close apart, so
 	// a worker outliving Run (wedged inside a client call) cannot

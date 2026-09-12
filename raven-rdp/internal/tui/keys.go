@@ -25,9 +25,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// M1: arrow keys arrive as KeyUp/KeyDown with empty Runes, so
 	// they must be matched on msg.Type, not on rune contents.
 	case msg.Type == tea.KeyUp:
-		if m.histCount > 0 {
+		if m.currentLen > 0 {
 			m.autoScroll = false
-			if m.scroll < m.histCount {
+			if m.scroll < m.currentLen {
 				m.scroll++
 			}
 		}
@@ -66,13 +66,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "k":
-			if m.histCount > 0 {
-				m.autoScroll = false
-				if m.scroll < m.histCount {
-					m.scroll++
+				if m.currentLen > 0 {
+					m.autoScroll = false
+					if m.scroll < m.currentLen {
+						m.scroll++
+					}
 				}
-			}
-			return m, nil
+				return m, nil
 		case "j":
 			if m.scroll > 0 {
 				m.scroll--

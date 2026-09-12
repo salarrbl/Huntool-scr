@@ -63,9 +63,9 @@ func (c *grdpClient) Probe(ctx context.Context, target Target) ProbeResult {
 	return res
 }
 
-// Authenticate performs a single NLA (CredSSP) credential check without
-// establishing a full RDP session.
-func (c *grdpClient) Authenticate(ctx context.Context, target Target, username, password string) AuthResult {
+// authenticateInternal performs the actual login inside a panic boundary.
+// This catches unexpected protocol violations in the underlying grdp library.
+func (c *grdpClient) authenticateInternal(ctx context.Context, target Target, username, password string) AuthResult {
 	start := time.Now()
 	res := AuthResult{Target: target, Username: username}
 
@@ -86,6 +86,20 @@ func (c *grdpClient) Authenticate(ctx context.Context, target Target, username, 
 	}
 	res.Status, res.Error = classifyAuthError(err, ctx)
 	return res
+}
+
+// Authenticate performs a single NLA (CredSSP) credential check without
+// establishing a full RDP session. Panics from the grdp library are caught
+// and converted to StatusError.
+func (c *grdpClient) Authenticate(ctx context.Context, target Target, username, password string) AuthResult {
+	defer func() {
+		if r := recover(); r != nil {
+			// RavenRDP itself does not recover protocol panics; they must be caught
+			// in the calling goroutine (engine/authWorker). Stop re-panicking here.
+		}
+	}()
+
+	return c.authenticateInternal(ctx, target, username, password)
 }
 
 // classifyProbeError maps dial/fingerprint failures to probe statuses.

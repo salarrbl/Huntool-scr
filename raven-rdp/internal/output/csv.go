@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// CSVHeader is the report column order. No password column exists by
-// construction.
-var CSVHeader = []string{"timestamp", "target", "status", "username", "duration_ms", "error"}
+// CSVHeader is the report column order.
+// The password column is included for successful authentication events.
+var CSVHeader = []string{"timestamp", "target", "status", "username", "password", "duration_ms", "error"}
 
 // CSVWriter streams audit results to a CSV file.
 //
@@ -38,12 +38,13 @@ func NewCSVWriter(path string) (*CSVWriter, error) {
 }
 
 // Event appends one result row.
-func (w *CSVWriter) Event(t time.Time, target, status, username string, duration time.Duration, errMsg string) error {
+func (w *CSVWriter) Event(t time.Time, target, status, username, password string, duration time.Duration, errMsg string) error {
 	return w.cw.Write([]string{
 		t.UTC().Format(time.RFC3339),
 		target,
 		status,
 		username,
+		password,
 		fmt.Sprintf("%d", duration.Milliseconds()),
 		errMsg,
 	})

@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/salarrbl/raven-rdp/internal/engine"
+	"github.com/salarrbl/raven-rdp/internal/output"
 	"github.com/salarrbl/raven-rdp/internal/rdp"
 )
 
@@ -119,7 +120,7 @@ func (m *Model) renderStats(w int) string {
 	return b.String()
 }
 
-// renderEvents draws the bounded live event feed (ONLY successful auths).
+// renderEvents draws the bounded live event feed.
 func (m *Model) renderEvents(w int) string {
 	inner := w - 4
 	if inner < 30 {
@@ -132,47 +133,23 @@ func (m *Model) renderEvents(w int) string {
 		avail = 3
 	}
 
-	// Filter to show ONLY successful auth events
 	events := m.visible()
-	var successEvents []engine.Event
-	for _, ev := range events {
-		if ev.Status == rdp.StatusAuthSuccess {
-			successEvents = append(successEvents, ev)
-		}
-	}
-
-	n := len(successEvents)
-	if n > avail {
-		n = avail
+	n := avail
+	if n > len(events) {
+		n = len(events)
 	}
 
 	var b strings.Builder
-	title := lipgloss.NewStyle().Foreground(lipgloss.Color("115")).Bold(true).Render("✓ AUTHENTICATION SUCCESS")
-	b.WriteString("╭" + title + " " + strings.Repeat("─", inner-lipgloss.Width(title)-2) + "╮\n")
+	title := "LIVE EVENTS"
+	b.WriteString("╭" + m.st.section.Render(title) + " " + strings.Repeat("─", inner-lipgloss.Width(title)-2) + "╮\n")
 
-	start := n - 1 - m.scroll
+	start := len(events) - n - m.scroll
 	if start < 0 {
 		start = 0
 	}
 	for i := 0; i < n; i++ {
-		index := start - i
-		if index < 0 {
-			continue
-		}
-		ev := successEvents[index]
-		line := fmt.Sprintf("│  %s  %s  %s  %s",
-				m.st.dim.Render(ev.Target),
-				lipgloss.NewStyle().Foreground(lipgloss.Color("70")).Bold(true).Render(ev.Username),
-				lipgloss.NewStyle().Foreground(lipgloss.Color("161")).Bold(true).Render("····"), // REDACTED placeholder
-				m.st.dim.Render(ev.Time.Format("15:04")),
-			)
-		if len(line) > inner-2 {
-			line = line[:inner-2]
-		}
-		b.WriteString("│ " + line + " │\n")
-	}
-	if n == 0 {
-		b.WriteString("│  (no successful authentications yet) │\n")
+		ev := events[start+i]
+		b.WriteString("│ " + m.renderEvent(ev, inner-2) + " │\n")
 	}
 	b.WriteString("╰" + strings.Repeat("─", inner) + "╯\n")
 	return b.String()
@@ -200,12 +177,31 @@ func (m *Model) renderFooter() string {
 
 // renderDone shows the final summary after the run finishes.
 func (m *Model) renderDone() string {
+	met := m.eng.Metrics()
+	s := output.Summary{
+		Targets:     met.Targets.Load(),
+		Open:        met.Open.Load(),
+		Closed:      met.Closed.Load(),
+		Timeout:     met.Timeout.Load(),
+		ProbeError:  met.ProbeError.Load(),
+		SkippedAuth: met.SkippedAuth.Load(),
+		Attempts:    met.Attempts.Load(),
+		Success:     met.Success.Load(),
+		Failed:      met.Failed.Load(),
+		AuthTimeout: met.AuthTimeout.Load(),
+		AuthError:   met.AuthError.Load(),
+		Cancelled:   met.Cancelled.Load(),
+		Dropped:     met.Dropped.Load(),
+		Duration:    met.Elapsed(),
+	}
+
 	var b strings.Builder
-	b.WriteString("╭" + strings.Repeat("─", m.width) + "╮" + "\n")
-	b.WriteString("│ " + m.st.title.Render("🐦‍⬛ RAVENRDP DONE") + " │" + "\n")
-	b.WriteString("╰" + strings.Repeat("─", m.width) + "╯" + "\n")
-	b.WriteString("\nTasks completed successfully!" + "\n")
-	b.WriteString("\n" + m.st.footer.Render("  q quit") + "\n")
+	b.WriteString(output.RenderSummary(s, m.color))
+	b.WriteString("\n")
+	if m.runErr != nil {
+		b.WriteString(" " + m.st.status("ERROR") + " " + m.st.message.Render(m.runErr.Error()) + "\n")
+	}
+	b.WriteString(m.st.footer.Render("  q quit") + "\n")
 	return b.String()
 }
 

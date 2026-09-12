@@ -30,7 +30,8 @@ const queueBuffer = 1024
 const cancelGrace = time.Second
 
 // Event is one observable outcome of the audit. Passwords are never
-// part of an event; only usernames (which are not secrets) appear.
+// part of an event; only usernames (which are not secrets) appear, except
+// for successful auth where the password may be included in file outputs.
 type Event struct {
 	Time     time.Time
 	Target   string
@@ -38,6 +39,7 @@ type Event struct {
 	Username string
 	Message  string
 	Duration time.Duration
+	Password string // populated only for AUTH_SUCCESS
 }
 
 // Metrics holds race-free run statistics. All counters are atomic and
@@ -64,6 +66,10 @@ type Metrics struct {
 	Cancelled    atomic.Int64
 	RateNotices  atomic.Int64
 	LimitReached atomic.Int64
+
+	// Current operation being performed
+	CurrentUsername atomic.Pointer[string]
+	CurrentPasswordIndex atomic.Int64
 
 	// N7: Dropped counts events that never reached the stream — the
 	// run was cancelled (emit drops rather than block a worker) or
@@ -247,6 +253,9 @@ func (e *Engine) closeEvents() {
 // Metrics exposes live statistics.
 func (e *Engine) Metrics() *Metrics { return &e.metrics }
 
+// PasswordCount returns the total number of passwords in the list.
+func (e *Engine) PasswordCount() int { return e.passCount }
+
 // Policy exposes the validated safety policy.
 func (e *Engine) Policy() safety.Policy { return e.policy }
 
@@ -357,10 +366,10 @@ func (e *Engine) feedTargets(ctx context.Context, reader *input.TargetReader) er
 			if !ok {
 				e.targetQueue.Close()
 				err := <-reader.Done
-				if err != nil {
-					e.log.Error("target stream failed", "error", err)
-					e.emit(ctx, rdp.StatusError, "", "", "target stream: "+err.Error(), 0)
-				}
+					if err != nil {
+						e.log.Error("target stream failed", "error", err)
+						e.emit(ctx, rdp.StatusError, "", "", "target stream: "+err.Error(), "", 0)
+					}
 				return err
 			}
 			e.metrics.Targets.Add(1)
