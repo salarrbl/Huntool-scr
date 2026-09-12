@@ -118,7 +118,7 @@ func (e *Engine) authWorker(ctx context.Context) {
 // why no more are possible). It returns the jobOutcome the caller
 // must act on.
 func (e *Engine) runJob(ctx context.Context, job *Job) jobOutcome {
-	user, pass, ok := job.NextCredential(e.users, e.passCount, e.passwordAt)
+	user, pass, passIdx, ok := job.NextCredential(e.users, e.passCount, e.passwordAt)
 	if !ok {
 		e.finishJob(ctx, job)
 		e.trackJobEnd()
@@ -151,7 +151,7 @@ func (e *Engine) runJob(ctx context.Context, job *Job) jobOutcome {
 
 	e.metrics.Attempts.Add(1)
 	e.metrics.CurrentUsername.Store(&user)
-	e.metrics.CurrentPasswordIndex.Store(int64(job.passIdx))
+	e.metrics.CurrentPasswordIndex.Store(int64(passIdx))
 
 	// Guard against protocol violations from the grdp library (e.g., nil fastPathListener dereference)
 	res := e.client.Authenticate(ctx, job.Target, user, pass)

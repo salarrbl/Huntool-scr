@@ -57,32 +57,33 @@ func (j *Job) MarkSuccess() {
 //
 // passwordAt is the only channel through which passwords are passed; jobs
 // never store them.
-func (j *Job) NextCredential(users []string, passCount int, passwordAt func(int) string) (string, string, bool) {
+func (j *Job) NextCredential(users []string, passCount int, passwordAt func(int) string) (string, string, int, bool) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
 	if j.finished {
-		return "", "", false
+		return "", "", 0, false
 	}
 	if !j.Guard.Reserve() {
 		j.finished = true
-		return "", "", false
+		return "", "", 0, false
 	}
 	if len(users) == 0 || passCount == 0 {
 		j.finished = true
-		return "", "", false
+		return "", "", 0, false
 	}
 
 	for j.passIdx < passCount {
 		if j.userIdx < len(users) {
 			user := users[j.userIdx]
 			pass := passwordAt(j.passIdx)
+			passIdx := j.passIdx
 			j.userIdx++
-			return user, pass, true
+			return user, pass, passIdx, true
 		}
 		j.userIdx = 0
 		j.passIdx++
 	}
 	j.finished = true
-	return "", "", false
+	return "", "", 0, false
 }
